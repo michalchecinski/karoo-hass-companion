@@ -7,9 +7,12 @@ The project is built using:
 - UI Framework: Jetpack Compose (Material3)
 - Build System: Gradle (Kotlin DSL)
 
+Do not update any dependencies if not asked or allowed directly.
+
 ### Docs
 
-Before implementation always look into `docs` and `specs` folders to identify conventions, decisions made, and other information relevant or related to the change you want to make.
+Before specification, planning, or implementation, read `docs` folders to identify
+conventions, product boundaries, and other information relevant to the change.
 
 ### Hammerhead Karoo integration
 
