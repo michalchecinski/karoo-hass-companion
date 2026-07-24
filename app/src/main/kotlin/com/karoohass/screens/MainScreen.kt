@@ -133,25 +133,24 @@ private fun HomeAssistantIcon(icon: String?, domain: String) {
             item { OutlinedTextField(pin, { pin = it.filter(Char::isDigit).take(6) }, label = { Text("4–6 digit PIN") }, singleLine = true, visualTransformation = PasswordVisualTransformation(), keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.NumberPassword)) }
             item {
                 Button(onClick = {
-                    error = model.savePinMode(selectedPinMode, pin.ifBlank { null })
-                    confirmation = if (error == null) "PIN protection saved" else null
-                    if (error == null) pin = ""
-                }) { Text("Save PIN protection") }
+                    model.savePinMode(selectedPinMode, pin.ifBlank { null })
+                }, enabled = !state.unlocking) { Text("Save PIN protection") }
             }
+            if (state.unlocking) item { Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(12.dp)) { CircularProgressIndicator(Modifier.size(20.dp), strokeWidth = 2.dp); Text("Saving PIN protection…") } }
         }
         if (selectedPinMode == PinMode.DISABLED && state.settings.pinMode != PinMode.DISABLED) {
             item { Text("Enter your current PIN to disable protection.") }
             item { OutlinedTextField(currentPin, { currentPin = it.filter(Char::isDigit).take(6) }, label = { Text("Current PIN") }, singleLine = true, visualTransformation = PasswordVisualTransformation(), keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.NumberPassword)) }
             item {
                 Button(onClick = {
-                    error = model.disablePinProtection(currentPin)
-                    confirmation = if (error == null) "PIN protection disabled" else null
-                    if (error == null) currentPin = ""
-                }, enabled = currentPin.length in 4..6) { Text("Disable PIN protection") }
+                    model.disablePinProtection(currentPin)
+                }, enabled = currentPin.length in 4..6 && !state.unlocking) { Text("Disable PIN protection") }
             }
+            if (state.unlocking) item { Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(12.dp)) { CircularProgressIndicator(Modifier.size(20.dp), strokeWidth = 2.dp); Text("Verifying PIN…") } }
         }
         item { error?.let { Text(it, color = MaterialTheme.colorScheme.error) } }
         item { confirmation?.let { Text(it, color = MaterialTheme.colorScheme.primary) } }
+        item { Spacer(Modifier.height(24.dp)) }
         item { TextButton(onClick = { showEraseConfirmation = true }) { Text("Forgot PIN / erase this account", color = MaterialTheme.colorScheme.error) } }
     }
     if (showEraseConfirmation) {

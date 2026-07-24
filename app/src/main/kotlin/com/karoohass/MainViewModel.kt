@@ -118,26 +118,43 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
         work.value = false
     }
     fun savePolicy(policy: ConnectionPolicy) = viewModelScope.launch { settingsStore.update { it.copy(connectionPolicy = policy) } }
-    fun savePinMode(mode: PinMode, pin: String? = null): String? {
-        if (mode == PinMode.DISABLED) return "Enter your current PIN to disable protection"
-        if (!pinStore.configured()) {
-            if (pin == null) return "Choose a 4–6 digit PIN"
-            runCatching { pinStore.set(pin) }.getOrElse { return "PIN must contain 4–6 digits" }
+    fun savePinMode(mode: PinMode, pin: String? = null) = viewModelScope.launch {
+        if (unlocking.value) return@launch
+        if (mode == PinMode.DISABLED) {
+            message.value = "Enter your current PIN to disable protection"
+            return@launch
         }
-        viewModelScope.launch { settingsStore.update { it.copy(pinMode = mode) } }
-        if (mode == PinMode.WHOLE_APP) wholeAppLocked.value = true
-        return null
+        if (!pinStore.configured() && pin == null) {
+            message.value = "Choose a 4–6 digit PIN"
+            return@launch
+        }
+        unlocking.value = true
+        val pinSet = if (!pinStore.configured()) withContext(Dispatchers.Default) { runCatching { pinStore.set(pin!!) } } else Result.success(Unit)
+        if (pinSet.isSuccess) {
+            settingsStore.update { it.copy(pinMode = mode) }
+            if (mode == PinMode.WHOLE_APP) wholeAppLocked.value = true
+            message.value = "PIN protection saved"
+        } else {
+            message.value = "PIN must contain 4–6 digits"
+        }
+        unlocking.value = false
     }
 
-    fun disablePinProtection(pin: String): String? = when (val result = pinStore.verify(pin)) {
-        is com.karoohass.security.PinResult.Success -> {
-            pinStore.clear()
-            viewModelScope.launch { settingsStore.update { it.copy(pinMode = PinMode.DISABLED) } }
-            wholeAppLocked.value = false
-            null
+    fun disablePinProtection(pin: String) = viewModelScope.launch {
+        if (unlocking.value) return@launch
+        unlocking.value = true
+        val result = withContext(Dispatchers.Default) { pinStore.verify(pin) }
+        when (result) {
+            is com.karoohass.security.PinResult.Success -> {
+                pinStore.clear()
+                settingsStore.update { it.copy(pinMode = PinMode.DISABLED) }
+                wholeAppLocked.value = false
+                message.value = "PIN protection disabled"
+            }
+            is com.karoohass.security.PinResult.Locked -> message.value = "PIN locked for ${result.remainingMs / 1000}s"
+            else -> message.value = "Incorrect PIN"
         }
-        is com.karoohass.security.PinResult.Locked -> "PIN locked for ${result.remainingMs / 1000}s"
-        else -> "Incorrect PIN"
+        unlocking.value = false
     }
     fun discover() = viewModelScope.launch { refreshEntities(silent = false) }
     private suspend fun refreshEntities(silent: Boolean) { work.value = true; runCatching { wifiRepository.discover() }.onSuccess { found ->
