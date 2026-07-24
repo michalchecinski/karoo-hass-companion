@@ -30,7 +30,7 @@ class SettingsStore(private val context: Context) {
             connectionPolicy = ConnectionPolicy.valueOf(root.optString("policy", ConnectionPolicy.WIFI_ONLY.name)),
             pinMode = PinMode.valueOf(root.optString("pinMode", PinMode.DISABLED.name)),
             actions = List(actions.length()) { i -> actions.getJSONObject(i).let { item ->
-                QuickAccessAction(item.getString("id"), item.getString("entityId"), item.getString("domain"), ActionKind.valueOf(item.getString("kind")), item.optBoolean("protected"), item.optBoolean("confirm"), item.optString("icon").takeIf { it.isNotBlank() }, item.optLong("order"))
+                QuickAccessAction(item.getString("id"), item.getString("entityId"), item.getString("domain"), ActionKind.valueOf(item.getString("kind")), item.optBoolean("protected"), item.optBoolean("confirm"), item.optString("icon").takeIf { it.isNotBlank() }, item.optLong("order"), item.optString("displayName").takeIf { it.isNotBlank() })
             } }.sortedBy { it.order },
         )
     }.getOrDefault(AppSettings())
@@ -38,7 +38,7 @@ class SettingsStore(private val context: Context) {
     private fun encode(settings: AppSettings) = JSONObject().apply {
         put("origin", settings.origin); put("policy", settings.connectionPolicy.name); put("pinMode", settings.pinMode.name)
         put("actions", JSONArray().apply { settings.actions.forEach { action -> put(JSONObject().apply {
-            put("id", action.id); put("entityId", action.entityId); put("domain", action.domain); put("kind", action.kind.name); put("protected", action.protected); put("confirm", action.requiresConfirmation); put("icon", action.icon); put("order", action.order)
+            put("id", action.id); put("entityId", action.entityId); put("domain", action.domain); put("kind", action.kind.name); put("protected", action.protected); put("confirm", action.requiresConfirmation); put("icon", action.icon); put("order", action.order); put("displayName", action.displayName)
         }) } })
     }
 }

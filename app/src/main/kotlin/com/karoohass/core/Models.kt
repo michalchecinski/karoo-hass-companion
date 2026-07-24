@@ -14,6 +14,7 @@ data class QuickAccessAction(
     val requiresConfirmation: Boolean = false,
     val icon: String? = null,
     val order: Long = 0,
+    val displayName: String? = null,
 )
 
 data class EntitySnapshot(
@@ -64,5 +65,5 @@ fun QuickAccessAction.label(entity: EntitySnapshot? = null): String {
         ActionKind.TOGGLE -> "Toggle"
         ActionKind.TURN_ON -> "Turn on"; ActionKind.TURN_OFF -> "Turn off"
     }
-    return "$operation ${entity?.friendlyName ?: entityId}"
+    return "$operation ${entity?.friendlyName ?: displayName ?: entityId}"
 }
