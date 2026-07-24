@@ -68,7 +68,7 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
     }
 
     fun openSetup() { screen.value = Screen.SETUP }
-    fun openManage() { screen.value = Screen.MANAGE; discover() }
+    fun openEntityChooser() { screen.value = Screen.MANAGE; discover() }
     fun home() { screen.value = Screen.HOME; pending.value = null; message.value = null }
     fun setOrigin(raw: String): String? { val normalized = oauth.normalizeOrigin(raw) ?: return "Enter a trusted HTTPS Home Assistant origin"; viewModelScope.launch { settingsStore.update { it.copy(origin = normalized) } }; return null }
     /** Starts OAuth from the validated input, not from DataStore's eventually-consistent state. */
@@ -94,9 +94,8 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
             .onSuccess { result ->
                 when (result) {
                     true -> {
-                        message.value = "Connected to Home Assistant"
-                        screen.value = Screen.MANAGE
-                        discover()
+                        message.value = null
+                        openEntityChooser()
                     }
                     false -> message.value = "Sign-in could not be completed"
                     null -> Unit

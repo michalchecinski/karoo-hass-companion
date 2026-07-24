@@ -12,6 +12,7 @@ class ActionSemanticsTest {
         assertEquals("open_cover", ActionKind.OPEN_COVER.serviceName())
         assertEquals("close_cover", ActionKind.CLOSE_COVER.serviceName())
         assertEquals("stop_cover", ActionKind.STOP_COVER.serviceName())
+        assertEquals("toggle", ActionKind.TOGGLE.serviceName())
         assertEquals("turn_on", ActionKind.TURN_ON.serviceName())
         assertEquals("turn_off", ActionKind.TURN_OFF.serviceName())
     }
@@ -25,5 +26,6 @@ class ActionSemanticsTest {
         assertEquals("off", ActionKind.TURN_OFF.expectedState())
         assertNull(ActionKind.RUN_SCRIPT.expectedState())
         assertNull(ActionKind.STOP_COVER.expectedState())
+        assertNull(ActionKind.TOGGLE.expectedState())
     }
 }

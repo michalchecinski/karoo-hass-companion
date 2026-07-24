@@ -10,6 +10,7 @@ import io.hammerhead.karooext.models.OnHttpResponse
 import kotlinx.coroutines.suspendCancellableCoroutine
 import kotlinx.coroutines.withTimeout
 import java.io.BufferedInputStream
+import java.io.ByteArrayOutputStream
 import java.net.HttpURLConnection
 import java.net.URL
 import kotlin.coroutines.resume
@@ -29,10 +30,23 @@ class DirectWifiTransport(private val context: Context) : HttpTransport {
             request.headers.forEach { (name, value) -> connection.setRequestProperty(name, value) }
             request.body?.let { bytes -> connection.doOutput = true; connection.outputStream.use { it.write(bytes) } }
             val stream = if (connection.responseCode >= 400) connection.errorStream else connection.inputStream
-            val bytes = stream?.let { BufferedInputStream(it).use { input -> input.readBytes().also { data -> if (data.size > 100_000) throw TransportException.Failure("Response exceeds 100 KB") } } }
+            val bytes = stream?.let { BufferedInputStream(it).use { input -> input.readAtMost(MAX_DIRECT_RESPONSE_BYTES) } }
             HttpResponse(connection.responseCode, connection.headerFields.filterValues { it != null }.mapValues { it.value.joinToString(",") }, bytes)
         } catch (exception: TransportException) { throw exception } catch (exception: Exception) { throw TransportException.Failure(exception.message ?: "Direct Wi-Fi request failed") } finally { connection.disconnect() }
     } }
+
+    private fun BufferedInputStream.readAtMost(limit: Int): ByteArray {
+        val output = ByteArrayOutputStream()
+        val buffer = ByteArray(DEFAULT_BUFFER_SIZE)
+        while (true) {
+            val count = read(buffer)
+            if (count < 0) return output.toByteArray()
+            if (output.size() + count > limit) throw TransportException.Failure("Response exceeds ${limit / 1_000} KB")
+            output.write(buffer, 0, count)
+        }
+    }
+
+    private companion object { const val MAX_DIRECT_RESPONSE_BYTES = 2_000_000 }
 }
 
 class KarooTransport(context: Context) : HttpTransport {
