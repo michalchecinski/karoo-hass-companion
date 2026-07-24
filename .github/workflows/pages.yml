@@ -2,8 +2,10 @@ name: Publish OAuth redirect page
 
 on:
   push:
-    branches: [v1-mvp]
-    paths: [docs/index.html, .github/workflows/pages.yml]
+    branches: [main]
+    paths:
+      - 'docs/**'
+      - .github/workflows/pages.yml
   workflow_dispatch:
 
 permissions:
@@ -20,6 +22,8 @@ jobs:
     steps:
       - uses: actions/checkout@08eba0b27e820071cde6df949e0beb9ba4906955 # v4.3.0
       - uses: actions/configure-pages@983d7736d9b0ae728b81ab479565c72886d7745b # v5.0.0
+        with:
+          enablement: true
       - uses: actions/upload-pages-artifact@56afc609e74202658d3ffba0e8f6dda462b719fa # v3.0.1
         with:
           path: docs
