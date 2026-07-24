@@ -10,6 +10,7 @@ import android.webkit.WebViewClient
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.text.KeyboardOptions
+import androidx.compose.foundation.text.KeyboardActions
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.LazyRow
 import androidx.compose.foundation.lazy.items
@@ -26,6 +27,7 @@ import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.text.input.KeyboardType
+import androidx.compose.ui.text.input.ImeAction
 import androidx.compose.ui.text.input.PasswordVisualTransformation
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.viewinterop.AndroidView
@@ -40,9 +42,14 @@ import com.karoohass.core.*
 @Composable
 fun MainScreen(state: UiState, model: MainViewModel) {
     var confirm by remember { mutableStateOf<QuickAccessAction?>(null) }
+    val displayedScreen = if (
+        state.screen == Screen.HOME &&
+        state.settings.origin != null &&
+        state.wholeAppLocked
+    ) Screen.PIN else state.screen
     Scaffold(
         bottomBar = {
-            if (state.screen != Screen.HOME) {
+            if (displayedScreen != Screen.HOME && displayedScreen != Screen.PIN) {
                 Row(Modifier.fillMaxWidth().padding(start = 8.dp, bottom = 6.dp)) {
                     FilledTonalButton(onClick = model::home) { Text("Back") }
                 }
@@ -50,7 +57,7 @@ fun MainScreen(state: UiState, model: MainViewModel) {
         },
     ) { padding ->
         Box(Modifier.fillMaxSize().padding(padding)) {
-            when (state.screen) {
+            when (displayedScreen) {
                 Screen.HOME -> Box(Modifier.padding(top = if (state.settings.origin != null) 48.dp else 0.dp)) {
                     Home(state, { action -> if (action.requiresConfirmation) confirm = action else model.invoke(action) }, model::openSetup)
                 }
@@ -59,7 +66,7 @@ fun MainScreen(state: UiState, model: MainViewModel) {
                 Screen.MANAGE -> Manage(state, model)
                 Screen.PIN -> PinEntry(state, model)
             }
-            if (state.screen == Screen.HOME && state.settings.origin != null) {
+            if (displayedScreen == Screen.HOME && state.settings.origin != null) {
                 IconButton(onClick = model::openSetup, modifier = Modifier.align(Alignment.TopEnd).padding(8.dp)) {
                     Icon(painterResource(R.drawable.ic_settings), contentDescription = "Settings")
                 }
@@ -73,7 +80,7 @@ fun MainScreen(state: UiState, model: MainViewModel) {
 @Composable private fun Home(state: UiState, invoke: (QuickAccessAction) -> Unit, setup: () -> Unit) {
     if (state.settings.origin == null) { Empty("Connect to Home Assistant to add Quick Access controls.", "Set up", setup); return }
     if (state.settings.actions.isEmpty()) { Empty("No Quick Access actions yet.", "Manage actions", setup); return }
-    LazyVerticalGrid(GridCells.Fixed(2), contentPadding = PaddingValues(10.dp), verticalArrangement = Arrangement.spacedBy(8.dp), horizontalArrangement = Arrangement.spacedBy(8.dp)) { items(state.settings.actions.size) { index -> val action = state.settings.actions[index]; val entity = state.snapshots[action.entityId]; ElevatedCard(Modifier.heightIn(min = 110.dp).fillMaxWidth().clickable(enabled = !state.busy && (entity?.available != false)) { invoke(action) }) { Column(Modifier.padding(12.dp), verticalArrangement = Arrangement.SpaceBetween) { Box(Modifier.fillMaxWidth(), contentAlignment = Alignment.Center) { HomeAssistantIcon(action.icon ?: entity?.icon, action.domain) }; Text(entity?.friendlyName ?: action.displayName ?: action.entityId, modifier = Modifier.fillMaxWidth(), style = MaterialTheme.typography.bodySmall, textAlign = TextAlign.Center, maxLines = 3, overflow = TextOverflow.Ellipsis); if (action.kind != ActionKind.RUN_SCRIPT) Text(when { entity == null -> "State unavailable"; !entity.available -> "Unavailable"; state.busy -> "Sending…"; else -> entity.state }, modifier = Modifier.fillMaxWidth(), textAlign = TextAlign.Center, color = if (entity?.available == false) MaterialTheme.colorScheme.error else MaterialTheme.colorScheme.onSurfaceVariant); if (action.protected) Text("PIN protected", modifier = Modifier.fillMaxWidth(), textAlign = TextAlign.Center, style = MaterialTheme.typography.labelSmall) } } } }
+    LazyVerticalGrid(GridCells.Fixed(2), contentPadding = PaddingValues(10.dp), verticalArrangement = Arrangement.spacedBy(8.dp), horizontalArrangement = Arrangement.spacedBy(8.dp)) { items(state.settings.actions.size) { index -> val action = state.settings.actions[index]; val entity = state.snapshots[action.entityId]; ElevatedCard(Modifier.heightIn(min = 110.dp).fillMaxWidth().clickable(enabled = !state.busy && (entity?.available != false)) { invoke(action) }) { Column(Modifier.padding(12.dp), verticalArrangement = Arrangement.SpaceBetween) { Box(Modifier.fillMaxWidth(), contentAlignment = Alignment.Center) { HomeAssistantIcon(action.icon ?: entity?.icon, action.domain) }; Text(entity?.friendlyName ?: action.displayName ?: action.entityId, modifier = Modifier.fillMaxWidth(), style = MaterialTheme.typography.bodySmall, textAlign = TextAlign.Center, maxLines = 3, overflow = TextOverflow.Ellipsis); if (action.kind != ActionKind.RUN_SCRIPT) Text(when { state.busy -> "Loading…"; entity == null -> "State unavailable"; !entity.available -> "Unavailable"; else -> entity.state }, modifier = Modifier.fillMaxWidth(), textAlign = TextAlign.Center, color = if (entity?.available == false) MaterialTheme.colorScheme.error else MaterialTheme.colorScheme.onSurfaceVariant); if (action.protected) Text("PIN protected", modifier = Modifier.fillMaxWidth(), textAlign = TextAlign.Center, style = MaterialTheme.typography.labelSmall) } } } }
 }
 
 @Composable
@@ -305,4 +312,22 @@ private fun ActionKind.label() = when (this) {
     ActionKind.TURN_OFF -> "Turn off"
 }
 
-@Composable private fun PinEntry(state: UiState, model: MainViewModel) { var pin by remember { mutableStateOf("") }; Column(Modifier.fillMaxSize().padding(24.dp), verticalArrangement = Arrangement.Center, horizontalAlignment = Alignment.CenterHorizontally) { Text("Enter PIN"); OutlinedTextField(pin, { pin = it.filter(Char::isDigit).take(6) }, singleLine = true, visualTransformation = PasswordVisualTransformation(), keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.NumberPassword)); Button(onClick = { model.submitPin(pin) }, enabled = pin.length in 4..6) { Text("Unlock") }; state.pending?.let { Text(it.label(state.snapshots[it.entityId])) } } }
+@Composable private fun PinEntry(state: UiState, model: MainViewModel) {
+    var pin by remember { mutableStateOf("") }
+    val unlock = { if (pin.length in 4..6) model.submitPin(pin) }
+    Column(Modifier.fillMaxSize().padding(24.dp), verticalArrangement = Arrangement.Center, horizontalAlignment = Alignment.CenterHorizontally) {
+        Text("Enter PIN")
+        OutlinedTextField(
+            value = pin,
+            onValueChange = { pin = it.filter(Char::isDigit).take(6) },
+            singleLine = true,
+            visualTransformation = PasswordVisualTransformation(),
+            keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.NumberPassword, imeAction = ImeAction.Done),
+            keyboardActions = KeyboardActions(onDone = { unlock() }),
+            enabled = !state.unlocking,
+        )
+        Button(onClick = unlock, enabled = pin.length in 4..6 && !state.unlocking) { Text("Unlock") }
+        if (state.unlocking) CircularProgressIndicator(Modifier.padding(top = 16.dp))
+        state.pending?.let { Text(it.label(state.snapshots[it.entityId])) }
+    }
+}

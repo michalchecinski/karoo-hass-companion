@@ -16,7 +16,9 @@ import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.combine
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.flow.stateIn
+import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.withContext
 import java.util.UUID
 
 data class UiState(
@@ -28,6 +30,8 @@ data class UiState(
     val outcome: ActionOutcome? = null,
     val pending: QuickAccessAction? = null,
     val authorizedUntil: Long = 0,
+    val unlocking: Boolean = false,
+    val wholeAppLocked: Boolean = false,
 )
 enum class Screen { HOME, SETUP, AUTH, MANAGE, PIN }
 
@@ -44,6 +48,8 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
     private val pending = MutableStateFlow<QuickAccessAction?>(null)
     private val outcome = MutableStateFlow<ActionOutcome?>(null)
     private val authorizedUntil = MutableStateFlow(0L)
+    private val unlocking = MutableStateFlow(false)
+    private val wholeAppLocked = MutableStateFlow(true)
     private var authorizationUrl: String? = null
     private val policyTransport = PolicyTransport({ state.value.settings.connectionPolicy }, DirectWifiTransport(application), KarooTransport(application))
     private val repository = HomeAssistantRepository({ state.value.settings.origin }, policyTransport, tokens) { oauth.refresh() }
@@ -52,19 +58,20 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
         combine(rawSettings, screen) { settings, current -> settings to current },
         combine(snapshots, work) { loaded, isBusy -> loaded to isBusy },
         combine(message, pending) { notice, request -> notice to request },
-        combine(outcome, authorizedUntil) { result, auth -> result to auth },
+        combine(outcome, authorizedUntil, unlocking, wholeAppLocked) { result, auth, isUnlocking, isWholeAppLocked -> PinUiState(result, auth, isUnlocking, isWholeAppLocked) },
     ) { settingsAndScreen, snapshotsAndWork, messageAndPending, outcomeAndAuth ->
-        UiState(settingsAndScreen.first, snapshotsAndWork.first, settingsAndScreen.second, snapshotsAndWork.second, messageAndPending.first, outcomeAndAuth.first, messageAndPending.second, outcomeAndAuth.second)
+        UiState(settingsAndScreen.first, snapshotsAndWork.first, settingsAndScreen.second, snapshotsAndWork.second, messageAndPending.first, outcomeAndAuth.outcome, messageAndPending.second, outcomeAndAuth.authorizedUntil, outcomeAndAuth.unlocking, outcomeAndAuth.wholeAppLocked)
     }.stateIn(viewModelScope, SharingStarted.Eagerly, UiState())
 
     init {
         viewModelScope.launch {
             val persisted = rawSettings.first()
+            wholeAppLocked.value = persisted.pinMode == PinMode.WHOLE_APP && persisted.origin != null
             val oauthOrigin = oauth.configuredOrigin()
             if (persisted.origin == null && oauthOrigin != null && runCatching { tokens.load() }.getOrNull() != null) {
                 settingsStore.update { current -> current.copy(origin = oauthOrigin) }
             }
-            if (persisted.origin != null && persisted.actions.isNotEmpty() && runCatching { tokens.load() }.getOrNull() != null) {
+            if (persisted.pinMode != PinMode.WHOLE_APP && persisted.origin != null && persisted.actions.isNotEmpty() && runCatching { tokens.load() }.getOrNull() != null) {
                 refreshEntities(silent = true)
             }
         }
@@ -118,6 +125,7 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
             runCatching { pinStore.set(pin) }.getOrElse { return "PIN must contain 4–6 digits" }
         }
         viewModelScope.launch { settingsStore.update { it.copy(pinMode = mode) } }
+        if (mode == PinMode.WHOLE_APP) wholeAppLocked.value = true
         return null
     }
 
@@ -125,13 +133,14 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
         is com.karoohass.security.PinResult.Success -> {
             pinStore.clear()
             viewModelScope.launch { settingsStore.update { it.copy(pinMode = PinMode.DISABLED) } }
+            wholeAppLocked.value = false
             null
         }
         is com.karoohass.security.PinResult.Locked -> "PIN locked for ${result.remainingMs / 1000}s"
         else -> "Incorrect PIN"
     }
-    fun discover() = refreshEntities(silent = false)
-    private fun refreshEntities(silent: Boolean) = viewModelScope.launch { work.value = true; runCatching { wifiRepository.discover() }.onSuccess { found ->
+    fun discover() = viewModelScope.launch { refreshEntities(silent = false) }
+    private suspend fun refreshEntities(silent: Boolean) { work.value = true; runCatching { wifiRepository.discover() }.onSuccess { found ->
         val byId = found.associateBy { it.entityId }
         snapshots.value = byId
         settingsStore.update { old -> old.copy(actions = old.actions.map { action -> byId[action.entityId]?.let { entity -> action.copy(displayName = entity.friendlyName, icon = entity.icon ?: action.icon) } ?: action }) }
@@ -140,7 +149,29 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
     fun remove(action: QuickAccessAction) = viewModelScope.launch { settingsStore.update { it.copy(actions = it.actions.filterNot { item -> item.id == action.id }) } }
     fun move(action: QuickAccessAction, offset: Int) = viewModelScope.launch { settingsStore.update { old -> val list = old.actions.sortedBy { it.order }.toMutableList(); val from = list.indexOfFirst { it.id == action.id }; val to = (from + offset).coerceIn(0, list.lastIndex); if (from >= 0) { list.add(to, list.removeAt(from)); old.copy(actions = list.mapIndexed { index, item -> item.copy(order = index.toLong()) }) } else old } }
     fun invoke(action: QuickAccessAction) { val needsAuth = state.value.settings.pinMode == PinMode.WHOLE_APP && System.currentTimeMillis() >= authorizedUntil.value || state.value.settings.pinMode == PinMode.SELECTED_ACTIONS && action.protected; if (needsAuth) { pending.value = action; screen.value = Screen.PIN } else begin(action) }
-    fun submitPin(pin: String) { when (val result = pinStore.verify(pin)) { is com.karoohass.security.PinResult.Success -> { val action = pending.value; if (state.value.settings.pinMode == PinMode.WHOLE_APP) authorizedUntil.value = System.currentTimeMillis() + 120_000; screen.value = Screen.HOME; pending.value = null; action?.let(::begin) }; is com.karoohass.security.PinResult.Locked -> message.value = "PIN locked for ${result.remainingMs / 1000}s"; else -> message.value = "Incorrect PIN" } }
+    fun submitPin(pin: String) = viewModelScope.launch {
+        if (unlocking.value) return@launch
+        unlocking.value = true
+        val result = withContext(Dispatchers.Default) { pinStore.verify(pin) }
+        unlocking.value = false
+        when (result) {
+            is com.karoohass.security.PinResult.Success -> {
+                val action = pending.value
+                val wholeAppProtected = state.value.settings.pinMode == PinMode.WHOLE_APP
+                if (wholeAppProtected) {
+                    authorizedUntil.value = System.currentTimeMillis() + 120_000
+                    wholeAppLocked.value = false
+                    work.value = true
+                }
+                screen.value = Screen.HOME
+                pending.value = null
+                if (wholeAppProtected) refreshEntities(silent = true)
+                action?.let(::begin)
+            }
+            is com.karoohass.security.PinResult.Locked -> message.value = "PIN locked for ${result.remainingMs / 1000}s"
+            else -> message.value = "Incorrect PIN"
+        }
+    }
     fun confirm(action: QuickAccessAction) = begin(action)
     private fun begin(action: QuickAccessAction) = viewModelScope.launch {
         var snapshot = snapshots.value[action.entityId]
@@ -176,7 +207,14 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
         }
         work.value = false
     }
-    fun signOutAndReset() = viewModelScope.launch { oauth.revoke(); pinStore.clear(); settingsStore.update { AppSettings() }; snapshots.value = emptyMap(); screen.value = Screen.SETUP }
-    fun foregroundChanged(foreground: Boolean) { if (!foreground) authorizedUntil.value = 0 }
-    fun enforceWholeAppPin() { if (state.value.settings.pinMode == PinMode.WHOLE_APP && state.value.settings.origin != null && System.currentTimeMillis() >= authorizedUntil.value && screen.value == Screen.HOME) screen.value = Screen.PIN }
+    fun signOutAndReset() = viewModelScope.launch { oauth.revoke(); pinStore.clear(); settingsStore.update { AppSettings() }; snapshots.value = emptyMap(); wholeAppLocked.value = false; screen.value = Screen.SETUP }
+    fun foregroundChanged(foreground: Boolean) { if (!foreground && state.value.settings.pinMode == PinMode.WHOLE_APP) { authorizedUntil.value = 0; wholeAppLocked.value = true } }
+    fun enforceWholeAppPin() { if (state.value.settings.pinMode == PinMode.WHOLE_APP && state.value.settings.origin != null) wholeAppLocked.value = true }
+
+    private data class PinUiState(
+        val outcome: ActionOutcome?,
+        val authorizedUntil: Long,
+        val unlocking: Boolean,
+        val wholeAppLocked: Boolean,
+    )
 }
