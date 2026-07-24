@@ -46,7 +46,9 @@ fun MainScreen(state: UiState, model: MainViewModel) {
     ) { padding ->
         Box(Modifier.fillMaxSize().padding(padding)) {
             when (state.screen) {
-                Screen.HOME -> Home(state, { action -> if (action.requiresConfirmation) confirm = action else model.invoke(action) }, model::openSetup)
+                Screen.HOME -> Box(Modifier.padding(top = if (state.settings.origin != null) 48.dp else 0.dp)) {
+                    Home(state, { action -> if (action.requiresConfirmation) confirm = action else model.invoke(action) }, model::openSetup)
+                }
                 Screen.SETUP -> Setup(state, model)
                 Screen.AUTH -> OAuthWebView(model.currentAuthorizationUrl(), model::receiveOAuthCallback)
                 Screen.MANAGE -> Manage(state, model)
@@ -66,7 +68,20 @@ fun MainScreen(state: UiState, model: MainViewModel) {
 @Composable private fun Home(state: UiState, invoke: (QuickAccessAction) -> Unit, setup: () -> Unit) {
     if (state.settings.origin == null) { Empty("Connect to Home Assistant to add Quick Access controls.", "Set up", setup); return }
     if (state.settings.actions.isEmpty()) { Empty("No Quick Access actions yet.", "Manage actions", setup); return }
-    LazyVerticalGrid(GridCells.Fixed(2), contentPadding = PaddingValues(10.dp), verticalArrangement = Arrangement.spacedBy(8.dp), horizontalArrangement = Arrangement.spacedBy(8.dp)) { items(state.settings.actions.size) { index -> val action = state.settings.actions[index]; val entity = state.snapshots[action.entityId]; ElevatedCard(Modifier.heightIn(min = 110.dp).fillMaxWidth().clickable(enabled = !state.busy && (entity?.available != false)) { invoke(action) }) { Column(Modifier.padding(12.dp), verticalArrangement = Arrangement.SpaceBetween) { Text(entity?.friendlyName ?: action.entityId, style = MaterialTheme.typography.bodySmall, maxLines = 2); if (action.kind != ActionKind.RUN_SCRIPT) Text(when { entity == null -> "State unavailable"; !entity.available -> "Unavailable"; state.busy -> "Sending…"; else -> entity.state }, color = if (entity?.available == false) MaterialTheme.colorScheme.error else MaterialTheme.colorScheme.onSurfaceVariant); if (action.protected) Text("PIN protected", style = MaterialTheme.typography.labelSmall) } } } }
+    LazyVerticalGrid(GridCells.Fixed(2), contentPadding = PaddingValues(10.dp), verticalArrangement = Arrangement.spacedBy(8.dp), horizontalArrangement = Arrangement.spacedBy(8.dp)) { items(state.settings.actions.size) { index -> val action = state.settings.actions[index]; val entity = state.snapshots[action.entityId]; ElevatedCard(Modifier.heightIn(min = 110.dp).fillMaxWidth().clickable(enabled = !state.busy && (entity?.available != false)) { invoke(action) }) { Column(Modifier.padding(12.dp), verticalArrangement = Arrangement.SpaceBetween) { Row(verticalAlignment = Alignment.CenterVertically) { HomeAssistantIcon(action.icon ?: entity?.icon, action.domain); Spacer(Modifier.width(8.dp)); Text(entity?.friendlyName ?: action.entityId, style = MaterialTheme.typography.bodySmall, maxLines = 2) }; if (action.kind != ActionKind.RUN_SCRIPT) Text(when { entity == null -> "State unavailable"; !entity.available -> "Unavailable"; state.busy -> "Sending…"; else -> entity.state }, color = if (entity?.available == false) MaterialTheme.colorScheme.error else MaterialTheme.colorScheme.onSurfaceVariant); if (action.protected) Text("PIN protected", style = MaterialTheme.typography.labelSmall) } } } }
+}
+
+@Composable
+private fun HomeAssistantIcon(icon: String?, domain: String) {
+    val resource = when {
+        icon?.contains("light", ignoreCase = true) == true || icon?.contains("bulb", ignoreCase = true) == true || domain == "light" -> R.drawable.ic_ha_light
+        icon?.contains("script", ignoreCase = true) == true || domain == "script" -> R.drawable.ic_ha_script
+        icon?.contains("lock", ignoreCase = true) == true || domain == "lock" -> R.drawable.ic_ha_lock
+        icon?.contains("cover", ignoreCase = true) == true || icon?.contains("garage", ignoreCase = true) == true || domain == "cover" -> R.drawable.ic_ha_cover
+        icon?.contains("switch", ignoreCase = true) == true || domain == "switch" -> R.drawable.ic_ha_switch
+        else -> R.drawable.ic_ha_entity
+    }
+    Icon(painterResource(resource), contentDescription = null, modifier = Modifier.size(28.dp), tint = MaterialTheme.colorScheme.primary)
 }
 
 @Composable private fun Empty(text: String, button: String, onClick: () -> Unit) = Column(Modifier.fillMaxSize().padding(24.dp), verticalArrangement = Arrangement.Center, horizontalAlignment = Alignment.CenterHorizontally) { Text(text); Spacer(Modifier.height(16.dp)); Button(onClick = onClick) { Text(button) } }
@@ -155,13 +170,13 @@ private fun openOAuthCallback(context: android.content.Context, uri: Uri, onCall
         if (!state.busy && entities.isNotEmpty() && filteredEntities.isEmpty()) item { Text("No entities match these filters.") }
         items(filteredEntities, key = { it.entityId }) { entity ->
             ElevatedCard(Modifier.fillMaxWidth().clickable { selected = entity }) {
-                ListItem(headlineContent = { Text(entity.friendlyName) }, supportingContent = { Text("${entity.domain} • ${entity.state}") })
+                ListItem(leadingContent = { HomeAssistantIcon(entity.icon, entity.domain) }, headlineContent = { Text(entity.friendlyName) }, supportingContent = { Text("${entity.domain} • ${entity.state}") })
             }
         }
         item { HorizontalDivider(); Text("Configured Quick Access actions") }
         items(state.settings.actions.size) { index ->
             val action = state.settings.actions[index]
-            ListItem(headlineContent = { Text(action.label(state.snapshots[action.entityId])) }, supportingContent = { Text(if (state.snapshots.containsKey(action.entityId)) "Configured" else "Entity unavailable") }, trailingContent = { Row { TextButton(onClick = { model.move(action, -1) }) { Text("↑") }; TextButton(onClick = { model.move(action, 1) }) { Text("↓") }; TextButton(onClick = { model.remove(action) }) { Text("Remove") } } })
+            ListItem(leadingContent = { HomeAssistantIcon(action.icon, action.domain) }, headlineContent = { Text(action.label(state.snapshots[action.entityId])) }, supportingContent = { Text(if (state.snapshots.containsKey(action.entityId)) "Configured" else "Entity unavailable") }, trailingContent = { Row { TextButton(onClick = { model.move(action, -1) }) { Text("↑") }; TextButton(onClick = { model.move(action, 1) }) { Text("↓") }; TextButton(onClick = { model.remove(action) }) { Text("Remove") } } })
         }
     }
     selected?.let { entity -> ActionPicker(entity, protect, confirm, { protect = it }, { confirm = it }, { kind -> model.add(entity, kind, protect, confirm); selected = null }, { selected = null }) }
