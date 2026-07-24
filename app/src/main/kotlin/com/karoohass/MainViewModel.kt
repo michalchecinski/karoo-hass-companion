@@ -64,6 +64,9 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
             if (persisted.origin == null && oauthOrigin != null && runCatching { tokens.load() }.getOrNull() != null) {
                 settingsStore.update { current -> current.copy(origin = oauthOrigin) }
             }
+            if (persisted.origin != null && persisted.actions.isNotEmpty() && runCatching { tokens.load() }.getOrNull() != null) {
+                refreshEntities(silent = true)
+            }
         }
     }
 
@@ -109,18 +112,52 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
     }
     fun savePolicy(policy: ConnectionPolicy) = viewModelScope.launch { settingsStore.update { it.copy(connectionPolicy = policy) } }
     fun savePinMode(mode: PinMode, pin: String? = null): String? { if (mode != PinMode.DISABLED && !pinStore.configured()) { if (pin == null) return "Choose a 4–6 digit PIN"; runCatching { pinStore.set(pin) }.getOrElse { return "PIN must contain 4–6 digits" } }; viewModelScope.launch { settingsStore.update { it.copy(pinMode = mode) } }; return null }
-    fun discover() = viewModelScope.launch { work.value = true; runCatching { wifiRepository.discover() }.onSuccess { found ->
+    fun discover() = refreshEntities(silent = false)
+    private fun refreshEntities(silent: Boolean) = viewModelScope.launch { work.value = true; runCatching { wifiRepository.discover() }.onSuccess { found ->
         val byId = found.associateBy { it.entityId }
         snapshots.value = byId
         settingsStore.update { old -> old.copy(actions = old.actions.map { action -> byId[action.entityId]?.let { entity -> action.copy(displayName = entity.friendlyName, icon = entity.icon ?: action.icon) } ?: action }) }
-    }.onFailure { message.value = it.message ?: "Could not load entities over Wi-Fi" }; work.value = false }
+    }.onFailure { if (!silent) message.value = it.message ?: "Could not load entities over Wi-Fi" }; work.value = false }
     fun add(entity: EntitySnapshot, kind: ActionKind, protected: Boolean, confirm: Boolean) = viewModelScope.launch { settingsStore.update { old -> if (old.actions.any { it.entityId == entity.entityId && it.kind == kind }) old else old.copy(actions = old.actions + QuickAccessAction(UUID.randomUUID().toString(), entity.entityId, entity.domain, kind, protected, confirm || kind in setOf(ActionKind.UNLOCK, ActionKind.OPEN_COVER), entity.icon, (old.actions.maxOfOrNull { a -> a.order } ?: -1) + 1, entity.friendlyName)) } }
     fun remove(action: QuickAccessAction) = viewModelScope.launch { settingsStore.update { it.copy(actions = it.actions.filterNot { item -> item.id == action.id }) } }
     fun move(action: QuickAccessAction, offset: Int) = viewModelScope.launch { settingsStore.update { old -> val list = old.actions.sortedBy { it.order }.toMutableList(); val from = list.indexOfFirst { it.id == action.id }; val to = (from + offset).coerceIn(0, list.lastIndex); if (from >= 0) { list.add(to, list.removeAt(from)); old.copy(actions = list.mapIndexed { index, item -> item.copy(order = index.toLong()) }) } else old } }
     fun invoke(action: QuickAccessAction) { val needsAuth = state.value.settings.pinMode == PinMode.WHOLE_APP && System.currentTimeMillis() >= authorizedUntil.value || state.value.settings.pinMode == PinMode.SELECTED_ACTIONS && action.protected; if (needsAuth) { pending.value = action; screen.value = Screen.PIN } else begin(action) }
     fun submitPin(pin: String) { when (val result = pinStore.verify(pin)) { is com.karoohass.security.PinResult.Success -> { val action = pending.value; if (state.value.settings.pinMode == PinMode.WHOLE_APP) authorizedUntil.value = System.currentTimeMillis() + 120_000; screen.value = Screen.HOME; pending.value = null; action?.let(::begin) }; is com.karoohass.security.PinResult.Locked -> message.value = "PIN locked for ${result.remainingMs / 1000}s"; else -> message.value = "Incorrect PIN" } }
     fun confirm(action: QuickAccessAction) = begin(action)
-    private fun begin(action: QuickAccessAction) = viewModelScope.launch { val snapshot = snapshots.value[action.entityId]; if (action.kind.expectedState() != null && (snapshot == null || System.currentTimeMillis() - snapshot.fetchedAt > 60_000)) { val refreshed = runCatching { repository.refresh(action.entityId) }.getOrNull(); if (refreshed == null || !refreshed.available) { outcome.value = ActionOutcome.FAILED; message.value = "Action unavailable: state could not be refreshed"; return@launch }; snapshots.value = snapshots.value + (action.entityId to refreshed) }; work.value = true; outcome.value = ActionOutcome.SENDING; val requested = repository.execute(action); outcome.value = requested; if (requested == ActionOutcome.SENDING) outcome.value = repository.verify(action); work.value = false }
+    private fun begin(action: QuickAccessAction) = viewModelScope.launch {
+        var snapshot = snapshots.value[action.entityId]
+        val needsCurrentState = action.kind.expectedState() != null || action.kind == ActionKind.TOGGLE
+        if (needsCurrentState && (snapshot == null || System.currentTimeMillis() - snapshot.fetchedAt > 60_000)) {
+            val refreshed = runCatching { repository.refresh(action.entityId) }.getOrNull()
+            if (refreshed == null || !refreshed.available) {
+                if (action.kind.expectedState() != null) {
+                    outcome.value = ActionOutcome.FAILED
+                    message.value = "Action unavailable: state could not be refreshed"
+                    return@launch
+                }
+            } else {
+                snapshot = refreshed
+                snapshots.value = snapshots.value + (action.entityId to refreshed)
+            }
+        }
+        work.value = true
+        outcome.value = ActionOutcome.SENDING
+        val requested = repository.execute(action)
+        outcome.value = requested
+        val expected = action.kind.expectedState()
+        val updated = when {
+            requested == ActionOutcome.SENDING && expected != null -> repository.awaitState(action.entityId) { it.state == expected }
+            requested == ActionOutcome.REQUESTED && action.kind == ActionKind.TOGGLE -> repository.awaitState(action.entityId) { snapshot == null || it.state != snapshot.state }
+            else -> null
+        }
+        if (updated != null) {
+            snapshots.value = snapshots.value + (action.entityId to updated)
+            outcome.value = ActionOutcome.COMPLETED
+        } else if (requested == ActionOutcome.SENDING || action.kind == ActionKind.TOGGLE) {
+            outcome.value = ActionOutcome.UNKNOWN
+        }
+        work.value = false
+    }
     fun signOutAndReset() = viewModelScope.launch { oauth.revoke(); pinStore.clear(); settingsStore.update { AppSettings() }; snapshots.value = emptyMap(); screen.value = Screen.SETUP }
     fun foregroundChanged(foreground: Boolean) { if (!foreground) authorizedUntil.value = 0 }
     fun enforceWholeAppPin() { if (state.value.settings.pinMode == PinMode.WHOLE_APP && state.value.settings.origin != null && System.currentTimeMillis() >= authorizedUntil.value && screen.value == Screen.HOME) screen.value = Screen.PIN }

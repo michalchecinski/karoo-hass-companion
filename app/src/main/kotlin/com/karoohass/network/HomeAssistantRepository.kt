@@ -20,8 +20,14 @@ class HomeAssistantRepository(
     }
     suspend fun verify(action: QuickAccessAction): ActionOutcome {
         val expected = action.kind.expectedState() ?: return ActionOutcome.REQUESTED
-        repeat(8) { if (refresh(action.entityId)?.state == expected) return ActionOutcome.COMPLETED; kotlinx.coroutines.delay(2_000) }
-        return ActionOutcome.UNKNOWN
+        return if (awaitState(action.entityId) { it.state == expected } != null) ActionOutcome.COMPLETED else ActionOutcome.UNKNOWN
+    }
+    suspend fun awaitState(entityId: String, matches: (EntitySnapshot) -> Boolean): EntitySnapshot? {
+        repeat(8) {
+            refresh(entityId)?.let { snapshot -> if (matches(snapshot)) return snapshot }
+            kotlinx.coroutines.delay(500)
+        }
+        return refresh(entityId)?.takeIf(matches)
     }
     private suspend fun request(method: String, path: String, body: ByteArray? = null): HttpResponse {
         val base = origin() ?: throw TransportException.Failure("Home Assistant is not configured")
