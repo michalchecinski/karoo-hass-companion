@@ -77,7 +77,7 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
         }
     }
 
-    fun openSetup() { screen.value = Screen.SETUP }
+    fun openSetup() { message.value = null; screen.value = Screen.SETUP }
     fun openEntityChooser() { screen.value = Screen.MANAGE; discover() }
     fun home() { screen.value = Screen.HOME; pending.value = null; message.value = null }
     fun setOrigin(raw: String): String? { val normalized = oauth.normalizeOrigin(raw) ?: return "Enter a trusted HTTPS Home Assistant origin"; viewModelScope.launch { settingsStore.update { it.copy(origin = normalized) } }; return null }
@@ -173,6 +173,7 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
         unlocking.value = false
         when (result) {
             is com.karoohass.security.PinResult.Success -> {
+                message.value = null
                 val action = pending.value
                 val wholeAppProtected = state.value.settings.pinMode == PinMode.WHOLE_APP
                 if (wholeAppProtected) {

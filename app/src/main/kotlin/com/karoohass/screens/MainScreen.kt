@@ -71,7 +71,7 @@ fun MainScreen(state: UiState, model: MainViewModel) {
                     Icon(painterResource(R.drawable.ic_settings), contentDescription = "Settings")
                 }
             }
-            state.message?.let { Text(it, Modifier.align(Alignment.BottomCenter).padding(12.dp), color = MaterialTheme.colorScheme.error) }
+            if (displayedScreen != Screen.SETUP) state.message?.let { Text(it, Modifier.align(Alignment.BottomCenter).padding(12.dp), color = MaterialTheme.colorScheme.error) }
         }
     }
     confirm?.let { action -> AlertDialog(onDismissRequest = { confirm = null }, title = { Text("Confirm action") }, text = { Text("${action.label(state.snapshots[action.entityId])}?") }, confirmButton = { TextButton(onClick = { confirm = null; model.invoke(action) }) { Text("Confirm") } }, dismissButton = { TextButton(onClick = { confirm = null }) { Text("Cancel") } }) }
@@ -150,7 +150,7 @@ private fun HomeAssistantIcon(icon: String?, domain: String) {
         }
         item { error?.let { Text(it, color = MaterialTheme.colorScheme.error) } }
         item { confirmation?.let { Text(it, color = MaterialTheme.colorScheme.primary) } }
-        item { Spacer(Modifier.height(24.dp)) }
+        item { state.message?.let { Text(it, color = MaterialTheme.colorScheme.primary) } }
         item { TextButton(onClick = { showEraseConfirmation = true }) { Text("Forgot PIN / erase this account", color = MaterialTheme.colorScheme.error) } }
     }
     if (showEraseConfirmation) {
@@ -313,7 +313,7 @@ private fun ActionKind.label() = when (this) {
 
 @Composable private fun PinEntry(state: UiState, model: MainViewModel) {
     var pin by remember { mutableStateOf("") }
-    val unlock = { if (pin.length in 4..6) model.submitPin(pin) }
+    val unlock = { if (pin.length in 4..6) { model.submitPin(pin); pin = "" } }
     Column(Modifier.fillMaxSize().padding(24.dp), verticalArrangement = Arrangement.Center, horizontalAlignment = Alignment.CenterHorizontally) {
         Text("Enter PIN")
         OutlinedTextField(
