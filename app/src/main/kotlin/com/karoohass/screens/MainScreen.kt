@@ -151,7 +151,16 @@ private fun HomeAssistantIcon(icon: String?, domain: String) {
         item { error?.let { Text(it, color = MaterialTheme.colorScheme.error) } }
         item { confirmation?.let { Text(it, color = MaterialTheme.colorScheme.primary) } }
         item { state.message?.let { Text(it, color = MaterialTheme.colorScheme.primary) } }
-        item { TextButton(onClick = { showEraseConfirmation = true }) { Text("Forgot PIN / erase this account", color = MaterialTheme.colorScheme.error) } }
+        item {
+            Button(
+                onClick = { showEraseConfirmation = true },
+                modifier = Modifier.fillMaxWidth(),
+                colors = ButtonDefaults.buttonColors(
+                    containerColor = MaterialTheme.colorScheme.errorContainer,
+                    contentColor = MaterialTheme.colorScheme.onErrorContainer,
+                ),
+            ) { Text("Forgot PIN / erase this account") }
+        }
     }
     if (showEraseConfirmation) {
         AlertDialog(
