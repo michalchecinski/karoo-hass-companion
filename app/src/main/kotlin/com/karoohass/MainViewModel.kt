@@ -1,6 +1,8 @@
 package com.karoohass
 
 import android.app.Application
+import android.net.Uri
+import android.util.Log
 import androidx.lifecycle.AndroidViewModel
 import androidx.lifecycle.viewModelScope
 import com.karoohass.auth.OAuthManager
@@ -12,6 +14,7 @@ import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.combine
+import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.launch
 import java.util.UUID
@@ -54,6 +57,16 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
         UiState(settingsAndScreen.first, snapshotsAndWork.first, settingsAndScreen.second, snapshotsAndWork.second, messageAndPending.first, outcomeAndAuth.first, messageAndPending.second, outcomeAndAuth.second)
     }.stateIn(viewModelScope, SharingStarted.Eagerly, UiState())
 
+    init {
+        viewModelScope.launch {
+            val persisted = rawSettings.first()
+            val oauthOrigin = oauth.configuredOrigin()
+            if (persisted.origin == null && oauthOrigin != null && runCatching { tokens.load() }.getOrNull() != null) {
+                settingsStore.update { current -> current.copy(origin = oauthOrigin) }
+            }
+        }
+    }
+
     fun openSetup() { screen.value = Screen.SETUP }
     fun openManage() { screen.value = Screen.MANAGE; discover() }
     fun home() { screen.value = Screen.HOME; pending.value = null; message.value = null }
@@ -67,12 +80,33 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
         return null
     }
     fun currentAuthorizationUrl() = authorizationUrl
-    fun callbackReceived() = viewModelScope.launch {
-        when (oauth.consumeCallback()) {
-            true -> { message.value = "Connected to Home Assistant"; screen.value = Screen.SETUP }
-            false -> message.value = "Sign-in could not be completed"
-            null -> Unit
+    fun receiveOAuthCallback(uri: Uri) {
+        if (!oauth.receive(uri)) {
+            message.value = "Sign-in callback was incomplete. Please try again."
+            return
         }
+        message.value = "Finishing sign-in…"
+        callbackReceived()
+    }
+    fun callbackReceived() = viewModelScope.launch {
+        work.value = true
+        runCatching { oauth.consumeCallback() }
+            .onSuccess { result ->
+                when (result) {
+                    true -> {
+                        message.value = "Connected to Home Assistant"
+                        screen.value = Screen.MANAGE
+                        discover()
+                    }
+                    false -> message.value = "Sign-in could not be completed"
+                    null -> Unit
+                }
+            }
+            .onFailure { error ->
+                Log.e("KarooHassOAuth", "Token exchange failed", error)
+                message.value = "Could not finish sign-in: ${error.message ?: "Wi-Fi is required"}"
+            }
+        work.value = false
     }
     fun savePolicy(policy: ConnectionPolicy) = viewModelScope.launch { settingsStore.update { it.copy(connectionPolicy = policy) } }
     fun savePinMode(mode: PinMode, pin: String? = null): String? { if (mode != PinMode.DISABLED && !pinStore.configured()) { if (pin == null) return "Choose a 4–6 digit PIN"; runCatching { pinStore.set(pin) }.getOrElse { return "PIN must contain 4–6 digits" } }; viewModelScope.launch { settingsStore.update { it.copy(pinMode = mode) } }; return null }

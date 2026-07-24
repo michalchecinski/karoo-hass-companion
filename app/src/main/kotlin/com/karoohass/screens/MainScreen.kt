@@ -1,7 +1,12 @@
 package com.karoohass.screens
 
+import android.content.Intent
 import android.annotation.SuppressLint
+import android.net.Uri
+import android.util.Log
+import android.webkit.WebResourceRequest
 import android.webkit.WebView
+import android.webkit.WebViewClient
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
@@ -16,8 +21,10 @@ import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.viewinterop.AndroidView
 import com.karoohass.MainViewModel
+import com.karoohass.R
 import com.karoohass.Screen
 import com.karoohass.UiState
+import com.karoohass.auth.OAuthCallbackActivity
 import com.karoohass.core.*
 
 @OptIn(ExperimentalMaterial3Api::class)
@@ -38,7 +45,7 @@ fun MainScreen(state: UiState, model: MainViewModel) {
             when (state.screen) {
                 Screen.HOME -> Home(state, { action -> if (action.requiresConfirmation) confirm = action else model.invoke(action) }, model::openSetup)
                 Screen.SETUP -> Setup(state, model)
-                Screen.AUTH -> OAuthWebView(model.currentAuthorizationUrl())
+                Screen.AUTH -> OAuthWebView(model.currentAuthorizationUrl(), model::receiveOAuthCallback)
                 Screen.MANAGE -> Manage(state, model)
                 Screen.PIN -> PinEntry(state, model)
             }
@@ -57,11 +64,57 @@ fun MainScreen(state: UiState, model: MainViewModel) {
 @Composable private fun Empty(text: String, button: String, onClick: () -> Unit) = Column(Modifier.fillMaxSize().padding(24.dp), verticalArrangement = Arrangement.Center, horizontalAlignment = Alignment.CenterHorizontally) { Text(text); Spacer(Modifier.height(16.dp)); Button(onClick = onClick) { Text(button) } }
 
 @Composable private fun Setup(state: UiState, model: MainViewModel) {
-    var url by remember(state.settings.origin) { mutableStateOf(state.settings.origin.orEmpty()) }; var pin by remember { mutableStateOf("") }; var error by remember { mutableStateOf<String?>(null) }
-    LazyColumn(Modifier.fillMaxSize().padding(16.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) { item { Text("Set up Home Assistant", style = MaterialTheme.typography.headlineSmall); Text("Use an externally reachable HTTPS address trusted by Karoo.") }; item { OutlinedTextField(url, { url = it }, label = { Text("Home Assistant URL") }, singleLine = true) }; item { Button(onClick = { error = model.beginAuthentication(url) }) { Text("Sign in with Home Assistant") } }; item { Text("Connection policy") }; item { ConnectionPolicy.entries.forEach { policy -> Row(Modifier.fillMaxWidth().clickable { model.savePolicy(policy) }, verticalAlignment = Alignment.CenterVertically) { RadioButton(policy == state.settings.connectionPolicy, { model.savePolicy(policy) }); Text(if (policy == ConnectionPolicy.WIFI_ONLY) "Wi-Fi only" else "Allow Companion fallback") } } }; item { Text("PIN protection") }; item { PinMode.entries.forEach { mode -> Row(Modifier.fillMaxWidth().clickable { error = model.savePinMode(mode, pin.ifBlank { null }) }, verticalAlignment = Alignment.CenterVertically) { RadioButton(mode == state.settings.pinMode, { error = model.savePinMode(mode, pin.ifBlank { null }) }); Text(mode.name.replace('_', ' ').lowercase().replaceFirstChar(Char::uppercase)) } } }; item { if (state.settings.pinMode != PinMode.DISABLED || pin.isNotBlank()) OutlinedTextField(pin, { pin = it.filter(Char::isDigit).take(6) }, label = { Text("4–6 digit PIN") }, singleLine = true) }; item { error?.let { Text(it, color = MaterialTheme.colorScheme.error) }; Button(onClick = model::openManage, enabled = state.settings.origin != null) { Text("Manage Quick Access") } }; item { TextButton(onClick = model::signOutAndReset) { Text("Forgot PIN / erase this account", color = MaterialTheme.colorScheme.error) } } }
+    var url by remember(state.settings.origin) { mutableStateOf(state.settings.origin ?: "https://") }; var pin by remember { mutableStateOf("") }; var error by remember { mutableStateOf<String?>(null) }
+    LazyColumn(Modifier.fillMaxSize().padding(16.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) { item { Text("Set up Home Assistant", style = MaterialTheme.typography.headlineSmall); Text("Use an externally reachable HTTPS address trusted by Karoo.") }; item { OutlinedTextField(url, { url = it }, label = { Text("Home Assistant URL") }, singleLine = true) }; item { if (state.settings.origin == null) Button(onClick = { error = model.beginAuthentication(url) }) { Text("Sign in with Home Assistant") } else Column(verticalArrangement = Arrangement.spacedBy(8.dp)) { Text("Connected to ${state.settings.origin}", color = MaterialTheme.colorScheme.primary); Button(onClick = model::openManage) { Text("Manage Quick Access") } } }; item { Text("Connection policy") }; item { ConnectionPolicy.entries.forEach { policy -> Row(Modifier.fillMaxWidth().clickable { model.savePolicy(policy) }, verticalAlignment = Alignment.CenterVertically) { RadioButton(policy == state.settings.connectionPolicy, { model.savePolicy(policy) }); Text(if (policy == ConnectionPolicy.WIFI_ONLY) "Wi-Fi only" else "Allow Companion fallback") } } }; item { Text("PIN protection") }; item { PinMode.entries.forEach { mode -> Row(Modifier.fillMaxWidth().clickable { error = model.savePinMode(mode, pin.ifBlank { null }) }, verticalAlignment = Alignment.CenterVertically) { RadioButton(mode == state.settings.pinMode, { error = model.savePinMode(mode, pin.ifBlank { null }) }); Text(mode.name.replace('_', ' ').lowercase().replaceFirstChar(Char::uppercase)) } } }; item { if (state.settings.pinMode != PinMode.DISABLED || pin.isNotBlank()) OutlinedTextField(pin, { pin = it.filter(Char::isDigit).take(6) }, label = { Text("4–6 digit PIN") }, singleLine = true) }; item { error?.let { Text(it, color = MaterialTheme.colorScheme.error) } }; item { TextButton(onClick = model::signOutAndReset) { Text("Forgot PIN / erase this account", color = MaterialTheme.colorScheme.error) } } }
 }
 
-@SuppressLint("SetJavaScriptEnabled") @Composable private fun OAuthWebView(url: String?) { if (url == null) { Text("Missing Home Assistant URL", Modifier.padding(16.dp)); return }; AndroidView(factory = { context -> WebView(context).apply { settings.javaScriptEnabled = true; loadUrl(url) } }, modifier = Modifier.fillMaxSize()) }
+@SuppressLint("SetJavaScriptEnabled")
+@Composable
+private fun OAuthWebView(url: String?, onCallback: (Uri) -> Unit) {
+    if (url == null) {
+        Text("Missing Home Assistant URL", Modifier.padding(16.dp))
+        return
+    }
+    AndroidView(
+        factory = { context ->
+            WebView(context).apply {
+                settings.javaScriptEnabled = true
+                webViewClient = object : WebViewClient() {
+                    override fun shouldOverrideUrlLoading(view: WebView, request: WebResourceRequest): Boolean {
+                        return openOAuthCallback(context, request.url, onCallback)
+                    }
+
+                    @Deprecated("Deprecated in Java")
+                    override fun shouldOverrideUrlLoading(view: WebView, url: String): Boolean {
+                        return openOAuthCallback(context, Uri.parse(url), onCallback)
+                    }
+                }
+                loadUrl(url)
+            }
+        },
+        modifier = Modifier.fillMaxSize(),
+    )
+}
+
+private fun openOAuthCallback(context: android.content.Context, uri: Uri, onCallback: (Uri) -> Unit): Boolean {
+    val expected = Uri.parse(context.getString(R.string.oauth_redirect_uri))
+    val isHttpsCallback = uri.scheme == expected.scheme && uri.host == expected.host && uri.path == expected.path
+    val isCustomCallback = uri.scheme == "karoohass" && uri.host == "auth-callback"
+    if (!isHttpsCallback && !isCustomCallback) return false
+    if (isHttpsCallback) {
+        Log.d("KarooHassOAuth", "Received Home Assistant authorization callback")
+        onCallback(uri)
+        return true
+    }
+    val callback = Uri.Builder()
+        .scheme("karoohass")
+        .authority("auth-callback")
+        .encodedQuery(uri.encodedQuery)
+        .build()
+    Log.d("KarooHassOAuth", "Received fallback Home Assistant authorization callback")
+    context.startActivity(Intent(context, OAuthCallbackActivity::class.java).setData(callback))
+    return true
+}
 
 @Composable private fun Manage(state: UiState, model: MainViewModel) {
     var selected by remember { mutableStateOf<EntitySnapshot?>(null) }; var protect by remember { mutableStateOf(false) }; var confirm by remember { mutableStateOf(false) }

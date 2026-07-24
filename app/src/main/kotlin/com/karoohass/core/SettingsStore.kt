@@ -16,7 +16,9 @@ class SettingsStore(private val context: Context) {
     val settings: Flow<AppSettings> = context.appDataStore.data.map { it[settingsKey]?.let(::decode) ?: AppSettings() }
 
     suspend fun update(transform: (AppSettings) -> AppSettings) {
-        context.appDataStore.edit { prefs -> prefs[settingsKey] = encode(decode(prefs[settingsKey])) .toString() }
+        context.appDataStore.edit { prefs ->
+            prefs[settingsKey] = encode(transform(decode(prefs[settingsKey]))).toString()
+        }
     }
 
     private fun decode(value: String?): AppSettings = runCatching {

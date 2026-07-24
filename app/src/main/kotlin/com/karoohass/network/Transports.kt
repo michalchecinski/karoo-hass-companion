@@ -20,7 +20,7 @@ sealed class TransportException(message: String) : Exception(message) { data obj
 interface HttpTransport { suspend fun execute(request: HttpRequest): HttpResponse }
 
 class DirectWifiTransport(private val context: Context) : HttpTransport {
-    override suspend fun execute(request: HttpRequest): HttpResponse = kotlinx.coroutines.withContext(kotlinx.coroutines.Dispatchers.IO) {
+    override suspend fun execute(request: HttpRequest): HttpResponse = withTimeout(30_000) { kotlinx.coroutines.withContext(kotlinx.coroutines.Dispatchers.IO) {
         val manager = context.getSystemService(ConnectivityManager::class.java)
         val network = manager.activeNetwork?.takeIf { manager.getNetworkCapabilities(it)?.hasTransport(NetworkCapabilities.TRANSPORT_WIFI) == true } ?: throw TransportException.WifiUnavailable
         val connection = network.openConnection(URL(request.url)) as HttpURLConnection
@@ -32,7 +32,7 @@ class DirectWifiTransport(private val context: Context) : HttpTransport {
             val bytes = stream?.let { BufferedInputStream(it).use { input -> input.readBytes().also { data -> if (data.size > 100_000) throw TransportException.Failure("Response exceeds 100 KB") } } }
             HttpResponse(connection.responseCode, connection.headerFields.filterValues { it != null }.mapValues { it.value.joinToString(",") }, bytes)
         } catch (exception: TransportException) { throw exception } catch (exception: Exception) { throw TransportException.Failure(exception.message ?: "Direct Wi-Fi request failed") } finally { connection.disconnect() }
-    }
+    } }
 }
 
 class KarooTransport(context: Context) : HttpTransport {
