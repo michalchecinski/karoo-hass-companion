@@ -7,6 +7,7 @@ import android.util.Log
 import android.webkit.WebResourceRequest
 import android.webkit.WebView
 import android.webkit.WebViewClient
+import androidx.compose.foundation.Image
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.text.KeyboardOptions
@@ -47,15 +48,7 @@ fun MainScreen(state: UiState, model: MainViewModel) {
         state.settings.origin != null &&
         state.wholeAppLocked
     ) Screen.PIN else state.screen
-    Scaffold(
-        bottomBar = {
-            if (displayedScreen != Screen.HOME && displayedScreen != Screen.PIN) {
-                Row(Modifier.fillMaxWidth().padding(start = 8.dp, bottom = 6.dp)) {
-                    FilledTonalButton(onClick = model::home) { Text("Back") }
-                }
-            }
-        },
-    ) { padding ->
+    Scaffold { padding ->
         Box(Modifier.fillMaxSize().padding(padding)) {
             when (displayedScreen) {
                 Screen.HOME -> Box(Modifier.padding(top = if (state.settings.origin != null) 48.dp else 0.dp)) {
@@ -70,6 +63,13 @@ fun MainScreen(state: UiState, model: MainViewModel) {
                 IconButton(onClick = model::openSetup, modifier = Modifier.align(Alignment.TopEnd).padding(8.dp)) {
                     Icon(painterResource(R.drawable.ic_settings), contentDescription = "Settings")
                 }
+            }
+            if (displayedScreen != Screen.HOME && displayedScreen != Screen.PIN) {
+                Image(
+                    painter = painterResource(R.drawable.back),
+                    contentDescription = "Back",
+                    modifier = Modifier.align(Alignment.BottomStart).padding(bottom = 10.dp).size(54.dp).clickable(onClick = model::back),
+                )
             }
             if (displayedScreen != Screen.SETUP) state.message?.let { Text(it, Modifier.align(Alignment.BottomCenter).padding(12.dp), color = MaterialTheme.colorScheme.error) }
         }
