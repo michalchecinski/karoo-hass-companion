@@ -9,6 +9,7 @@ import android.webkit.WebView
 import android.webkit.WebViewClient
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
+import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.LazyRow
 import androidx.compose.foundation.lazy.items
@@ -24,6 +25,8 @@ import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
+import androidx.compose.ui.text.input.KeyboardType
+import androidx.compose.ui.text.input.PasswordVisualTransformation
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.viewinterop.AndroidView
 import com.karoohass.MainViewModel
@@ -93,6 +96,9 @@ private fun HomeAssistantIcon(icon: String?, domain: String) {
     var pin by remember { mutableStateOf("") }
     var selectedPinMode by remember(state.settings.pinMode) { mutableStateOf(state.settings.pinMode) }
     var error by remember { mutableStateOf<String?>(null) }
+    var confirmation by remember { mutableStateOf<String?>(null) }
+    var currentPin by remember { mutableStateOf("") }
+    var showEraseConfirmation by remember { mutableStateOf(false) }
     LazyColumn(Modifier.fillMaxSize().padding(16.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
         item { Text("Set up Home Assistant", style = MaterialTheme.typography.titleMedium); Text("Use an externally reachable HTTPS address trusted by Karoo.") }
         item { OutlinedTextField(url, { url = it }, label = { Text("Home Assistant URL") }, singleLine = true) }
@@ -107,7 +113,8 @@ private fun HomeAssistantIcon(icon: String?, domain: String) {
             PinMode.entries.forEach { mode ->
                 val selectMode = {
                     selectedPinMode = mode
-                    error = if (mode == PinMode.DISABLED) model.savePinMode(mode) else null
+                    confirmation = null
+                    error = null
                 }
                 Row(Modifier.fillMaxWidth().clickable(onClick = selectMode), verticalAlignment = Alignment.CenterVertically) {
                     RadioButton(mode == selectedPinMode, selectMode)
@@ -116,11 +123,38 @@ private fun HomeAssistantIcon(icon: String?, domain: String) {
             }
         }
         if (selectedPinMode != PinMode.DISABLED) {
-            item { OutlinedTextField(pin, { pin = it.filter(Char::isDigit).take(6) }, label = { Text("4–6 digit PIN") }, singleLine = true) }
-            item { Button(onClick = { error = model.savePinMode(selectedPinMode, pin.ifBlank { null }) }) { Text("Save PIN protection") } }
+            item { OutlinedTextField(pin, { pin = it.filter(Char::isDigit).take(6) }, label = { Text("4–6 digit PIN") }, singleLine = true, visualTransformation = PasswordVisualTransformation(), keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.NumberPassword)) }
+            item {
+                Button(onClick = {
+                    error = model.savePinMode(selectedPinMode, pin.ifBlank { null })
+                    confirmation = if (error == null) "PIN protection saved" else null
+                    if (error == null) pin = ""
+                }) { Text("Save PIN protection") }
+            }
+        }
+        if (selectedPinMode == PinMode.DISABLED && state.settings.pinMode != PinMode.DISABLED) {
+            item { Text("Enter your current PIN to disable protection.") }
+            item { OutlinedTextField(currentPin, { currentPin = it.filter(Char::isDigit).take(6) }, label = { Text("Current PIN") }, singleLine = true, visualTransformation = PasswordVisualTransformation(), keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.NumberPassword)) }
+            item {
+                Button(onClick = {
+                    error = model.disablePinProtection(currentPin)
+                    confirmation = if (error == null) "PIN protection disabled" else null
+                    if (error == null) currentPin = ""
+                }, enabled = currentPin.length in 4..6) { Text("Disable PIN protection") }
+            }
         }
         item { error?.let { Text(it, color = MaterialTheme.colorScheme.error) } }
-        item { TextButton(onClick = model::signOutAndReset) { Text("Forgot PIN / erase this account", color = MaterialTheme.colorScheme.error) } }
+        item { confirmation?.let { Text(it, color = MaterialTheme.colorScheme.primary) } }
+        item { TextButton(onClick = { showEraseConfirmation = true }) { Text("Forgot PIN / erase this account", color = MaterialTheme.colorScheme.error) } }
+    }
+    if (showEraseConfirmation) {
+        AlertDialog(
+            onDismissRequest = { showEraseConfirmation = false },
+            title = { Text("Erase this account?") },
+            text = { Text("This will remove the saved Home Assistant connection, Quick Access actions, and PIN. This cannot be undone.") },
+            confirmButton = { TextButton(onClick = { showEraseConfirmation = false; model.signOutAndReset() }) { Text("Erase") } },
+            dismissButton = { TextButton(onClick = { showEraseConfirmation = false }) { Text("Cancel") } },
+        )
     }
 }
 
@@ -271,4 +305,4 @@ private fun ActionKind.label() = when (this) {
     ActionKind.TURN_OFF -> "Turn off"
 }
 
-@Composable private fun PinEntry(state: UiState, model: MainViewModel) { var pin by remember { mutableStateOf("") }; Column(Modifier.fillMaxSize().padding(24.dp), verticalArrangement = Arrangement.Center, horizontalAlignment = Alignment.CenterHorizontally) { Text("Enter PIN"); OutlinedTextField(pin, { pin = it.filter(Char::isDigit).take(6) }, singleLine = true); Button(onClick = { model.submitPin(pin) }, enabled = pin.length in 4..6) { Text("Unlock") }; state.pending?.let { Text(it.label(state.snapshots[it.entityId])) } } }
+@Composable private fun PinEntry(state: UiState, model: MainViewModel) { var pin by remember { mutableStateOf("") }; Column(Modifier.fillMaxSize().padding(24.dp), verticalArrangement = Arrangement.Center, horizontalAlignment = Alignment.CenterHorizontally) { Text("Enter PIN"); OutlinedTextField(pin, { pin = it.filter(Char::isDigit).take(6) }, singleLine = true, visualTransformation = PasswordVisualTransformation(), keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.NumberPassword)); Button(onClick = { model.submitPin(pin) }, enabled = pin.length in 4..6) { Text("Unlock") }; state.pending?.let { Text(it.label(state.snapshots[it.entityId])) } } }

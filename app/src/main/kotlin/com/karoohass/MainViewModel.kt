@@ -111,7 +111,25 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
         work.value = false
     }
     fun savePolicy(policy: ConnectionPolicy) = viewModelScope.launch { settingsStore.update { it.copy(connectionPolicy = policy) } }
-    fun savePinMode(mode: PinMode, pin: String? = null): String? { if (mode != PinMode.DISABLED && !pinStore.configured()) { if (pin == null) return "Choose a 4–6 digit PIN"; runCatching { pinStore.set(pin) }.getOrElse { return "PIN must contain 4–6 digits" } }; viewModelScope.launch { settingsStore.update { it.copy(pinMode = mode) } }; return null }
+    fun savePinMode(mode: PinMode, pin: String? = null): String? {
+        if (mode == PinMode.DISABLED) return "Enter your current PIN to disable protection"
+        if (!pinStore.configured()) {
+            if (pin == null) return "Choose a 4–6 digit PIN"
+            runCatching { pinStore.set(pin) }.getOrElse { return "PIN must contain 4–6 digits" }
+        }
+        viewModelScope.launch { settingsStore.update { it.copy(pinMode = mode) } }
+        return null
+    }
+
+    fun disablePinProtection(pin: String): String? = when (val result = pinStore.verify(pin)) {
+        is com.karoohass.security.PinResult.Success -> {
+            pinStore.clear()
+            viewModelScope.launch { settingsStore.update { it.copy(pinMode = PinMode.DISABLED) } }
+            null
+        }
+        is com.karoohass.security.PinResult.Locked -> "PIN locked for ${result.remainingMs / 1000}s"
+        else -> "Incorrect PIN"
+    }
     fun discover() = refreshEntities(silent = false)
     private fun refreshEntities(silent: Boolean) = viewModelScope.launch { work.value = true; runCatching { wifiRepository.discover() }.onSuccess { found ->
         val byId = found.associateBy { it.entityId }
