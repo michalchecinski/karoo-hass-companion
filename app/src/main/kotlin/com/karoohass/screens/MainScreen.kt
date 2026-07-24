@@ -89,8 +89,39 @@ private fun HomeAssistantIcon(icon: String?, domain: String) {
 @Composable private fun Empty(text: String, button: String, onClick: () -> Unit) = Column(Modifier.fillMaxSize().padding(24.dp), verticalArrangement = Arrangement.Center, horizontalAlignment = Alignment.CenterHorizontally) { Text(text); Spacer(Modifier.height(16.dp)); Button(onClick = onClick) { Text(button) } }
 
 @Composable private fun Setup(state: UiState, model: MainViewModel) {
-    var url by remember(state.settings.origin) { mutableStateOf(state.settings.origin ?: "https://") }; var pin by remember { mutableStateOf("") }; var error by remember { mutableStateOf<String?>(null) }
-    LazyColumn(Modifier.fillMaxSize().padding(16.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) { item { Text("Set up Home Assistant", style = MaterialTheme.typography.headlineSmall); Text("Use an externally reachable HTTPS address trusted by Karoo.") }; item { OutlinedTextField(url, { url = it }, label = { Text("Home Assistant URL") }, singleLine = true) }; item { if (state.settings.origin == null) Button(onClick = { error = model.beginAuthentication(url) }) { Text("Sign in with Home Assistant") } else Column(verticalArrangement = Arrangement.spacedBy(8.dp)) { Text("Connected to ${state.settings.origin}", color = MaterialTheme.colorScheme.primary); Button(onClick = model::openEntityChooser) { Text("Manage Quick Access") } } }; item { Text("Connection policy") }; item { ConnectionPolicy.entries.forEach { policy -> Row(Modifier.fillMaxWidth().clickable { model.savePolicy(policy) }, verticalAlignment = Alignment.CenterVertically) { RadioButton(policy == state.settings.connectionPolicy, { model.savePolicy(policy) }); Text(if (policy == ConnectionPolicy.WIFI_ONLY) "Wi-Fi only" else "Allow Companion fallback") } } }; item { Text("PIN protection") }; item { PinMode.entries.forEach { mode -> Row(Modifier.fillMaxWidth().clickable { error = model.savePinMode(mode, pin.ifBlank { null }) }, verticalAlignment = Alignment.CenterVertically) { RadioButton(mode == state.settings.pinMode, { error = model.savePinMode(mode, pin.ifBlank { null }) }); Text(mode.name.replace('_', ' ').lowercase().replaceFirstChar(Char::uppercase)) } } }; item { if (state.settings.pinMode != PinMode.DISABLED || pin.isNotBlank()) OutlinedTextField(pin, { pin = it.filter(Char::isDigit).take(6) }, label = { Text("4–6 digit PIN") }, singleLine = true) }; item { error?.let { Text(it, color = MaterialTheme.colorScheme.error) } }; item { TextButton(onClick = model::signOutAndReset) { Text("Forgot PIN / erase this account", color = MaterialTheme.colorScheme.error) } } }
+    var url by remember(state.settings.origin) { mutableStateOf(state.settings.origin ?: "https://") }
+    var pin by remember { mutableStateOf("") }
+    var selectedPinMode by remember(state.settings.pinMode) { mutableStateOf(state.settings.pinMode) }
+    var error by remember { mutableStateOf<String?>(null) }
+    LazyColumn(Modifier.fillMaxSize().padding(16.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
+        item { Text("Set up Home Assistant", style = MaterialTheme.typography.titleMedium); Text("Use an externally reachable HTTPS address trusted by Karoo.") }
+        item { OutlinedTextField(url, { url = it }, label = { Text("Home Assistant URL") }, singleLine = true) }
+        item {
+            if (state.settings.origin == null) Button(onClick = { error = model.beginAuthentication(url) }) { Text("Sign in with Home Assistant") }
+            else Column(verticalArrangement = Arrangement.spacedBy(8.dp)) { Text("Connected to ${state.settings.origin}", color = MaterialTheme.colorScheme.primary); Button(onClick = model::openEntityChooser) { Text("Manage Quick Access") } }
+        }
+        item { Text("Connection policy") }
+        item { ConnectionPolicy.entries.forEach { policy -> Row(Modifier.fillMaxWidth().clickable { model.savePolicy(policy) }, verticalAlignment = Alignment.CenterVertically) { RadioButton(policy == state.settings.connectionPolicy, { model.savePolicy(policy) }); Text(if (policy == ConnectionPolicy.WIFI_ONLY) "Wi-Fi only" else "Allow Companion fallback") } } }
+        item { Text("PIN protection") }
+        item {
+            PinMode.entries.forEach { mode ->
+                val selectMode = {
+                    selectedPinMode = mode
+                    error = if (mode == PinMode.DISABLED) model.savePinMode(mode) else null
+                }
+                Row(Modifier.fillMaxWidth().clickable(onClick = selectMode), verticalAlignment = Alignment.CenterVertically) {
+                    RadioButton(mode == selectedPinMode, selectMode)
+                    Text(mode.name.replace('_', ' ').lowercase().replaceFirstChar(Char::uppercase))
+                }
+            }
+        }
+        if (selectedPinMode != PinMode.DISABLED) {
+            item { OutlinedTextField(pin, { pin = it.filter(Char::isDigit).take(6) }, label = { Text("4–6 digit PIN") }, singleLine = true) }
+            item { Button(onClick = { error = model.savePinMode(selectedPinMode, pin.ifBlank { null }) }) { Text("Save PIN protection") } }
+        }
+        item { error?.let { Text(it, color = MaterialTheme.colorScheme.error) } }
+        item { TextButton(onClick = model::signOutAndReset) { Text("Forgot PIN / erase this account", color = MaterialTheme.colorScheme.error) } }
+    }
 }
 
 @SuppressLint("SetJavaScriptEnabled")
