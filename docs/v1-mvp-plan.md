@@ -1,5 +1,10 @@
 > Agent-created document: This plan was generated collaboratively with Codex for future reference.
 
+> **Implementation status (2026-07-24):** This document records the original
+> MVP scope. The implemented behavior, including later UX and security
+> refinements, is documented in [current-implementation.md](current-implementation.md).
+> Where the two differ, the current implementation reference is authoritative.
+
 # Karoo Home Assistant Companion — v1 MVP
 
 ## Summary
