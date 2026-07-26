@@ -1,0 +1,13 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512" role="img" aria-labelledby="title description">
+  <title id="title">Karoo Home Assistant Companion icon</title>
+  <desc id="description">A white house outline containing an amber toggle on a dark teal rounded square.</desc>
+  <rect width="512" height="512" rx="112" fill="#12353f"/>
+  <g fill="none" stroke="#fff" stroke-linecap="round" stroke-linejoin="round" stroke-width="32">
+    <path d="M120 248 256 136l136 112"/>
+    <path d="M148 224v160h216V224"/>
+    <path d="M320 184v-44h44v80"/>
+  </g>
+  <rect x="192" y="272" width="128" height="64" rx="32" fill="#ffb547"/>
+  <circle cx="288" cy="304" r="22" fill="#12353f"/>
+</svg>

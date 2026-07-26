@@ -1,0 +1,45 @@
+name: Bug report
+description: Report reproducible incorrect behavior
+labels:
+  - bug
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Thanks for helping improve Karoo Home Assistant Companion. Remove credentials, tokens, private URLs, and other sensitive Home Assistant data from screenshots and logs.
+  - type: textarea
+    id: description
+    attributes:
+      label: What happened?
+      description: Describe the actual and expected behavior.
+    validations:
+      required: true
+  - type: textarea
+    id: reproduce
+    attributes:
+      label: Steps to reproduce
+      placeholder: |
+        1. Open…
+        2. Select…
+        3. Observe…
+    validations:
+      required: true
+  - type: input
+    id: app-version
+    attributes:
+      label: App version
+      placeholder: 0.1.0
+    validations:
+      required: true
+  - type: textarea
+    id: environment
+    attributes:
+      label: Environment
+      description: Include Karoo model/KOS version, Home Assistant version, and connection policy where relevant.
+    validations:
+      required: true
+  - type: textarea
+    id: evidence
+    attributes:
+      label: Screenshots, video, or sanitized logs
+      description: Add supporting material without secrets or private Home Assistant data.

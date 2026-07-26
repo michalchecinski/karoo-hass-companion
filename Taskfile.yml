@@ -1,0 +1,25 @@
+---
+# https://taskfile.dev
+
+version: "3"
+
+tasks:
+  fmt:
+    desc: Format Kotlin and Kotlin DSL sources.
+    cmds:
+      - ./gradlew ktlintFormat
+
+  check:
+    desc: Run formatting, unit, lint, and Android checks.
+    cmds:
+      - ./gradlew ktlintCheck check
+
+  build:
+    desc: Build and verify the debug application.
+    cmds:
+      - ./gradlew ktlintCheck check assembleDebug
+
+  installDebug:
+    desc: Install the debug application on a connected device.
+    cmds:
+      - ./gradlew installDebug

@@ -1,7 +1,50 @@
+import java.util.Base64
+
 plugins {
     alias(libs.plugins.android.application)
     alias(libs.plugins.jetbrains.kotlin.android)
     alias(libs.plugins.compose.compiler)
+    alias(libs.plugins.ktlint)
+}
+
+ktlint {
+    android = true
+    verbose = true
+}
+
+val releaseVersion = providers.environmentVariable("RELEASE_VERSION").orNull?.takeIf { it.isNotBlank() }
+val buildNumber = providers.environmentVariable("BUILD_NUMBER").orNull?.toIntOrNull()
+val releaseSigningRequired = providers.environmentVariable("REQUIRE_RELEASE_SIGNING").orNull == "true"
+val releaseSigningValues =
+    mapOf(
+        "KEY_ALIAS" to providers.environmentVariable("KEY_ALIAS").orNull,
+        "KEY_PASSWORD" to providers.environmentVariable("KEY_PASSWORD").orNull,
+        "KEYSTORE_PASSWORD" to providers.environmentVariable("KEYSTORE_PASSWORD").orNull,
+        "KEYSTORE_BASE64" to providers.environmentVariable("KEYSTORE_BASE64").orNull,
+    )
+val configuredSigningValues = releaseSigningValues.filterValues { !it.isNullOrBlank() }
+val hasCompleteReleaseSigning = configuredSigningValues.size == releaseSigningValues.size
+
+if (configuredSigningValues.isNotEmpty() && !hasCompleteReleaseSigning) {
+    val missingValues = releaseSigningValues.filterValues { it.isNullOrBlank() }.keys.sorted()
+    throw GradleException("Incomplete release signing configuration. Missing: ${missingValues.joinToString()}")
+}
+if (releaseSigningRequired && !hasCompleteReleaseSigning) {
+    throw GradleException("A signed release was requested, but release signing credentials are unavailable.")
+}
+
+val temporaryReleaseKeystore =
+    if (hasCompleteReleaseSigning) {
+        File.createTempFile("karoo-hass-companion-", ".jks").apply {
+            writeBytes(Base64.getDecoder().decode(releaseSigningValues.getValue("KEYSTORE_BASE64")))
+        }
+    } else {
+        null
+    }
+
+@Suppress("DEPRECATION")
+gradle.buildFinished {
+    temporaryReleaseKeystore?.delete()
 }
 
 android {
@@ -12,14 +55,32 @@ android {
         applicationId = "com.karoohass"
         minSdk = 23
         targetSdk = 34
-        versionCode = 1
-        versionName = "1.0"
+        versionCode = buildNumber ?: 1
+        versionName = releaseVersion ?: "0.1.0-dev"
+    }
+
+    signingConfigs {
+        if (hasCompleteReleaseSigning) {
+            create("release") {
+                keyAlias = releaseSigningValues.getValue("KEY_ALIAS")
+                keyPassword = releaseSigningValues.getValue("KEY_PASSWORD")
+                storeFile = temporaryReleaseKeystore
+                storePassword = releaseSigningValues.getValue("KEYSTORE_PASSWORD")
+            }
+        }
     }
 
     buildTypes {
+        debug {
+            manifestPlaceholders["releaseVersion"] = "latest"
+        }
         release {
+            if (hasCompleteReleaseSigning) {
+                signingConfig = signingConfigs.getByName("release")
+            }
             isMinifyEnabled = false
             proguardFiles(getDefaultProguardFile("proguard-android-optimize.txt"), "proguard-rules.pro")
+            manifestPlaceholders["releaseVersion"] = releaseVersion ?: "latest"
         }
     }
     compileOptions {

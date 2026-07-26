@@ -1,0 +1,24 @@
+name: Feature request
+description: Suggest a focused Home Assistant control improvement
+labels:
+  - feature
+body:
+  - type: textarea
+    id: use-case
+    attributes:
+      label: Rider use case
+      description: Explain the problem and when it occurs on the Karoo.
+    validations:
+      required: true
+  - type: textarea
+    id: proposal
+    attributes:
+      label: Proposed behavior
+      description: Describe the smallest useful interaction.
+    validations:
+      required: true
+  - type: textarea
+    id: safety
+    attributes:
+      label: Safety, privacy, or security considerations
+      description: Note any implications for authentication, connectivity, PIN protection, or consequential Home Assistant actions.

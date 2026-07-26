@@ -1,0 +1,41 @@
+name: Enforce version label
+
+on:
+  pull_request:
+    types:
+      - labeled
+      - unlabeled
+      - opened
+      - reopened
+      - synchronize
+
+permissions:
+  contents: read
+  pull-requests: read
+
+jobs:
+  enforce-version-label:
+    name: Enforce version label
+    runs-on: ubuntu-24.04
+    steps:
+      - name: Require exactly one version label
+        env:
+          LABELS_JSON: ${{ toJson(github.event.pull_request.labels.*.name) }}
+        run: |
+          version_labels=$(jq --compact-output \
+            '[.[] | select(. == "version:major" or . == "version:minor" or . == "version:patch" or . == "version:skip")]' \
+            <<< "$LABELS_JSON")
+          label_count=$(jq 'length' <<< "$version_labels")
+
+          if [[ "$label_count" -ne 1 ]]; then
+            {
+              echo "### ❌ Exactly one release version label is required"
+              echo
+              echo "Add one of: \`version:major\`, \`version:minor\`, \`version:patch\`, or \`version:skip\`."
+              echo
+              echo "Found: \`$version_labels\`"
+            } >> "$GITHUB_STEP_SUMMARY"
+            exit 1
+          fi
+
+          echo "Version label: $(jq --raw-output '.[0]' <<< "$version_labels")" >> "$GITHUB_STEP_SUMMARY"

@@ -16,9 +16,10 @@ import com.karoohass.theme.AppTheme
 @Composable
 fun MainScreen() {
     Box(
-        modifier = Modifier
-            .fillMaxSize()
-            .background(MaterialTheme.colorScheme.background),
+        modifier =
+            Modifier
+                .fillMaxSize()
+                .background(MaterialTheme.colorScheme.background),
         contentAlignment = Alignment.Center,
     ) {
         Text(text = stringResource(id = R.string.hello_karoo), color = MaterialTheme.colorScheme.onBackground)
