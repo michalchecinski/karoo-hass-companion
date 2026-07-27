@@ -30,14 +30,15 @@ class ActionSemanticsTest {
     }
 
     @Test fun `cover actions follow Home Assistant supported feature flags`() {
-        val cover = EntitySnapshot(
-            entityId = "cover.garage",
-            domain = "cover",
-            state = "closed",
-            supportedFeatures = 1 or 8,
-            available = true,
-            friendlyName = "Garage",
-        )
+        val cover =
+            EntitySnapshot(
+                entityId = "cover.garage",
+                domain = "cover",
+                state = "closed",
+                supportedFeatures = 1 or 8,
+                available = true,
+                friendlyName = "Garage",
+            )
 
         assertEquals(
             listOf(ActionKind.OPEN_COVER, ActionKind.STOP_COVER),
@@ -46,14 +47,15 @@ class ActionSemanticsTest {
     }
 
     @Test fun `cover without supported operations exposes no actions`() {
-        val cover = EntitySnapshot(
-            entityId = "cover.read_only",
-            domain = "cover",
-            state = "closed",
-            supportedFeatures = 0,
-            available = true,
-            friendlyName = "Read only cover",
-        )
+        val cover =
+            EntitySnapshot(
+                entityId = "cover.read_only",
+                domain = "cover",
+                state = "closed",
+                supportedFeatures = 0,
+                available = true,
+                friendlyName = "Read only cover",
+            )
 
         assertEquals(emptyList<ActionKind>(), cover.availableActionKinds())
     }

@@ -1,0 +1,26 @@
+name: CI
+
+on:
+  workflow_dispatch:
+  workflow_call:
+  pull_request:
+    branches:
+      - main
+    paths:
+      - .editorconfig
+      - .github/workflows/_build.yml
+      - .github/workflows/ci.yml
+      - .git-hooks/**
+      - app/**
+      - build.gradle.kts
+      - gradle/**
+      - settings.gradle.kts
+
+permissions:
+  contents: read
+  packages: read
+
+jobs:
+  build:
+    name: Build
+    uses: ./.github/workflows/_build.yml

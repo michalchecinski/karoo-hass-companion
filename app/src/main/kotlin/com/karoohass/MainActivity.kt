@@ -11,7 +11,25 @@ import com.karoohass.theme.AppTheme
 
 class MainActivity : ComponentActivity() {
     private val model by viewModels<MainViewModel>()
-    override fun onCreate(savedInstanceState: Bundle?) { super.onCreate(savedInstanceState); setContent { AppTheme { val state by model.state.collectAsStateWithLifecycle(); MainScreen(state, model) } } }
-    override fun onResume() { super.onResume(); model.callbackReceived(); model.enforceWholeAppPin() }
-    override fun onStop() { model.foregroundChanged(false); super.onStop() }
+
+    override fun onCreate(savedInstanceState: Bundle?) {
+        super.onCreate(savedInstanceState)
+        setContent {
+            AppTheme {
+                val state by model.state.collectAsStateWithLifecycle()
+                MainScreen(state, model)
+            }
+        }
+    }
+
+    override fun onResume() {
+        super.onResume()
+        model.callbackReceived()
+        model.enforceWholeAppPin()
+    }
+
+    override fun onStop() {
+        model.foregroundChanged(false)
+        super.onStop()
+    }
 }

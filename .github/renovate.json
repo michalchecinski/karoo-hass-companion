@@ -1,0 +1,65 @@
+{
+  "$schema": "https://docs.renovatebot.com/renovate-schema.json",
+  "extends": [
+    "config:recommended",
+    "schedule:daily",
+    ":rebaseStalePrs",
+    ":maintainLockFilesMonthly",
+    ":preserveSemverRanges"
+  ],
+  "vulnerabilityAlerts": {
+    "labels": [
+      "security"
+    ]
+  },
+  "osvVulnerabilityAlerts": true,
+  "dependencyDashboard": true,
+  "labels": [
+    "version:patch",
+    "renovate",
+    "dependencies"
+  ],
+  "packageRules": [
+    {
+      "matchManagers": [
+        "github-actions"
+      ],
+      "matchUpdateTypes": [
+        "minor",
+        "patch"
+      ],
+      "groupName": "all non-major github actions",
+      "automerge": true
+    },
+    {
+      "matchManagers": [
+        "gradle"
+      ],
+      "matchUpdateTypes": [
+        "patch"
+      ],
+      "automerge": false,
+      "groupName": "all Gradle dependency patches"
+    },
+    {
+      "matchManagers": [
+        "gradle"
+      ],
+      "matchUpdateTypes": [
+        "minor",
+        "major"
+      ],
+      "enabled": false
+    },
+    {
+      "matchManagers": [
+        "gradle-wrapper"
+      ],
+      "matchUpdateTypes": [
+        "minor",
+        "major"
+      ],
+      "enabled": false
+    }
+  ]
+}

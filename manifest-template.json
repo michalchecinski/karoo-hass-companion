@@ -1,0 +1,15 @@
+{
+  "label": "Karoo Home Assistant Companion",
+  "packageName": "com.karoohass",
+  "iconUrl": "https://github.com/michalchecinski/karoo-hass-companion/releases/download/__VERSION_NUMBER_PLACEHOLDER__/karoo-hass-companion-icon.png",
+  "latestApkUrl": "https://github.com/michalchecinski/karoo-hass-companion/releases/download/__VERSION_NUMBER_PLACEHOLDER__/karoo-hass-companion.apk",
+  "latestVersion": "__VERSION_NUMBER_PLACEHOLDER__",
+  "latestVersionCode": 0,
+  "apkSha256": "__APK_SHA256_PLACEHOLDER__",
+  "developer": "Michal C.",
+  "description": "A focused Home Assistant remote for the Hammerhead Karoo.",
+  "releaseNotes": "__RELEASE_NOTES_PLACEHOLDER__",
+  "tags": [
+    "home automation"
+  ]
+}

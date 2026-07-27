@@ -1,8 +1,11 @@
 package com.karoohass.core
 
 enum class ConnectionPolicy { WIFI_ONLY, ALLOW_COMPANION_FALLBACK }
+
 enum class PinMode { DISABLED, WHOLE_APP, SELECTED_ACTIONS }
+
 enum class ActionKind { RUN_SCRIPT, LOCK, UNLOCK, OPEN_COVER, CLOSE_COVER, STOP_COVER, TOGGLE, TURN_ON, TURN_OFF }
+
 enum class ActionOutcome { SENDING, REQUESTED, COMPLETED, FAILED, UNKNOWN }
 
 data class QuickAccessAction(
@@ -36,47 +39,57 @@ data class AppSettings(
     val actions: List<QuickAccessAction> = emptyList(),
 )
 
-fun EntitySnapshot.availableActionKinds(): List<ActionKind> = when (domain) {
-    "script" -> listOf(ActionKind.RUN_SCRIPT)
-    "lock" -> listOf(ActionKind.LOCK, ActionKind.UNLOCK)
-    "cover" -> buildList {
-        if (supportedFeatures and COVER_SUPPORT_OPEN != 0) add(ActionKind.OPEN_COVER)
-        if (supportedFeatures and COVER_SUPPORT_CLOSE != 0) add(ActionKind.CLOSE_COVER)
-        if (supportedFeatures and COVER_SUPPORT_STOP != 0) add(ActionKind.STOP_COVER)
+fun EntitySnapshot.availableActionKinds(): List<ActionKind> =
+    when (domain) {
+        "script" -> listOf(ActionKind.RUN_SCRIPT)
+        "lock" -> listOf(ActionKind.LOCK, ActionKind.UNLOCK)
+        "cover" ->
+            buildList {
+                if (supportedFeatures and COVER_SUPPORT_OPEN != 0) add(ActionKind.OPEN_COVER)
+                if (supportedFeatures and COVER_SUPPORT_CLOSE != 0) add(ActionKind.CLOSE_COVER)
+                if (supportedFeatures and COVER_SUPPORT_STOP != 0) add(ActionKind.STOP_COVER)
+            }
+        "light", "switch" -> listOf(ActionKind.TOGGLE)
+        else -> emptyList()
     }
-    "light", "switch" -> listOf(ActionKind.TOGGLE)
-    else -> emptyList()
-}
 
-fun ActionKind.serviceName(): String = when (this) {
-    ActionKind.RUN_SCRIPT -> "turn_on"
-    ActionKind.LOCK -> "lock"
-    ActionKind.UNLOCK -> "unlock"
-    ActionKind.OPEN_COVER -> "open_cover"
-    ActionKind.CLOSE_COVER -> "close_cover"
-    ActionKind.STOP_COVER -> "stop_cover"
-    ActionKind.TOGGLE -> "toggle"
-    ActionKind.TURN_ON -> "turn_on"
-    ActionKind.TURN_OFF -> "turn_off"
-}
+fun ActionKind.serviceName(): String =
+    when (this) {
+        ActionKind.RUN_SCRIPT -> "turn_on"
+        ActionKind.LOCK -> "lock"
+        ActionKind.UNLOCK -> "unlock"
+        ActionKind.OPEN_COVER -> "open_cover"
+        ActionKind.CLOSE_COVER -> "close_cover"
+        ActionKind.STOP_COVER -> "stop_cover"
+        ActionKind.TOGGLE -> "toggle"
+        ActionKind.TURN_ON -> "turn_on"
+        ActionKind.TURN_OFF -> "turn_off"
+    }
 
-fun ActionKind.expectedState(): String? = when (this) {
-    ActionKind.LOCK -> "locked"
-    ActionKind.UNLOCK -> "unlocked"
-    ActionKind.OPEN_COVER -> "open"
-    ActionKind.CLOSE_COVER -> "closed"
-    ActionKind.TURN_ON -> "on"
-    ActionKind.TURN_OFF -> "off"
-    ActionKind.RUN_SCRIPT, ActionKind.STOP_COVER, ActionKind.TOGGLE -> null
-}
+fun ActionKind.expectedState(): String? =
+    when (this) {
+        ActionKind.LOCK -> "locked"
+        ActionKind.UNLOCK -> "unlocked"
+        ActionKind.OPEN_COVER -> "open"
+        ActionKind.CLOSE_COVER -> "closed"
+        ActionKind.TURN_ON -> "on"
+        ActionKind.TURN_OFF -> "off"
+        ActionKind.RUN_SCRIPT, ActionKind.STOP_COVER, ActionKind.TOGGLE -> null
+    }
 
 fun QuickAccessAction.label(entity: EntitySnapshot? = null): String {
-    val operation = when (kind) {
-        ActionKind.RUN_SCRIPT -> "Run"; ActionKind.LOCK -> "Lock"; ActionKind.UNLOCK -> "Unlock"
-        ActionKind.OPEN_COVER -> "Open"; ActionKind.CLOSE_COVER -> "Close"; ActionKind.STOP_COVER -> "Stop"
-        ActionKind.TOGGLE -> "Toggle"
-        ActionKind.TURN_ON -> "Turn on"; ActionKind.TURN_OFF -> "Turn off"
-    }
+    val operation =
+        when (kind) {
+            ActionKind.RUN_SCRIPT -> "Run"
+            ActionKind.LOCK -> "Lock"
+            ActionKind.UNLOCK -> "Unlock"
+            ActionKind.OPEN_COVER -> "Open"
+            ActionKind.CLOSE_COVER -> "Close"
+            ActionKind.STOP_COVER -> "Stop"
+            ActionKind.TOGGLE -> "Toggle"
+            ActionKind.TURN_ON -> "Turn on"
+            ActionKind.TURN_OFF -> "Turn off"
+        }
     return "$operation ${entity?.friendlyName ?: displayName ?: entityId}"
 }
 

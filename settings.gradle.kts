@@ -14,8 +14,14 @@ dependencyResolutionManagement {
         maven {
             url = uri("https://maven.pkg.github.com/hammerheadnav/karoo-ext")
             credentials {
-                username = providers.gradleProperty("gpr.user").getOrElse(System.getenv("USERNAME"))
-                password = providers.gradleProperty("gpr.key").getOrElse(System.getenv("TOKEN"))
+                username = providers.gradleProperty("gpr.user")
+                    .orElse(providers.environmentVariable("GH_USER"))
+                    .orElse(providers.environmentVariable("USERNAME"))
+                    .orNull
+                password = providers.gradleProperty("gpr.key")
+                    .orElse(providers.environmentVariable("GH_TOKEN"))
+                    .orElse(providers.environmentVariable("TOKEN"))
+                    .orNull
             }
         }
     }
