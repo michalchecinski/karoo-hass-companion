@@ -29,6 +29,10 @@
                 android:name="io.hammerhead.karooext.EXTENSION_INFO"
                 android:resource="@xml/extension_info" />
         </service>
+
+        <meta-data
+            android:name="io.hammerhead.karooext.MANIFEST_URL"
+            android:value="https://github.com/michalchecinski/karoo-hass-companion/releases/latest/download/manifest.json" />
     </application>
 
 </manifest>

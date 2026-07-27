@@ -3,7 +3,9 @@ name: Publish OAuth redirect page
 on:
   push:
     branches: [main]
-    paths: [pages/**, .github/workflows/pages.yml]
+    paths:
+      - pages/**
+      - .github/workflows/pages.yml
   workflow_dispatch:
 
 permissions:

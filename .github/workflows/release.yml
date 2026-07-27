@@ -1,0 +1,280 @@
+name: Release
+
+on:
+  workflow_dispatch:
+    inputs:
+      beta:
+        description: Create a beta release
+        required: true
+        type: boolean
+        default: false
+
+concurrency:
+  group: release
+  cancel-in-progress: false
+
+permissions:
+  contents: write
+  actions: read
+  packages: read
+  pull-requests: read
+
+jobs:
+  setup:
+    name: Setup
+    runs-on: ubuntu-24.04
+    outputs:
+      version: ${{ steps.release.outputs.version }}
+      last_version: ${{ steps.release.outputs.last_version }}
+    steps:
+      - name: Require main branch
+        if: github.ref_name != 'main'
+        run: |
+          echo "Releases may only be prepared from main." >&2
+          exit 1
+
+      - name: Checkout repository
+        uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
+        with:
+          fetch-depth: 0
+
+      - name: Calculate release
+        id: release
+        shell: bash
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          IS_BETA: ${{ inputs.beta }}
+        run: |
+          set -euo pipefail
+
+          releases=$(gh release list --limit 100 --json tagName,isDraft,isPrerelease,publishedAt)
+          latest_any=$(jq --raw-output \
+            '[.[] | select(.isDraft == false and .publishedAt != null)] | sort_by(.publishedAt) | last | .tagName // ""' \
+            <<< "$releases")
+          latest_stable=$(jq --raw-output \
+            '[.[] | select(.isDraft == false and .isPrerelease == false and .publishedAt != null)] | sort_by(.publishedAt) | last | .tagName // ""' \
+            <<< "$releases")
+
+          if [[ "$IS_BETA" == "true" ]]; then
+            changelog_base="$latest_any"
+          else
+            changelog_base="$latest_stable"
+          fi
+
+          release_type=""
+          if [[ -z "$changelog_base" ]]; then
+            release_type="minor"
+          else
+            pr_numbers=$(git log "$changelog_base..HEAD" --format="%s" \
+              | sed -nE 's/.* \(#([0-9]+)\)$/\1/p' \
+              | sort -u)
+
+            if [[ -z "$pr_numbers" ]]; then
+              echo "No squash-merged pull requests found since $changelog_base." >&2
+              exit 1
+            fi
+
+            has_major=false
+            has_minor=false
+            has_patch=false
+            has_releasable_change=false
+
+            while IFS= read -r pr_number; do
+              [[ -z "$pr_number" ]] && continue
+              labels=$(gh pr view "$pr_number" --json labels --jq '.labels[].name')
+              if grep -qx "version:skip" <<< "$labels"; then
+                continue
+              fi
+
+              has_releasable_change=true
+              grep -qx "version:major" <<< "$labels" && has_major=true
+              grep -qx "version:minor" <<< "$labels" && has_minor=true
+              grep -qx "version:patch" <<< "$labels" && has_patch=true
+            done <<< "$pr_numbers"
+
+            if [[ "$has_releasable_change" != "true" ]]; then
+              echo "All changes since $changelog_base are marked version:skip." >&2
+              exit 1
+            elif [[ "$has_major" == "true" ]]; then
+              release_type="major"
+            elif [[ "$has_minor" == "true" ]]; then
+              release_type="minor"
+            elif [[ "$has_patch" == "true" ]]; then
+              release_type="patch"
+            else
+              echo "No releasable version label was found." >&2
+              exit 1
+            fi
+          fi
+
+          if [[ "$latest_any" =~ ^([0-9]+)\.([0-9]+)\.([0-9]+)-beta([0-9]*)$ ]]; then
+            base_version="${BASH_REMATCH[1]}.${BASH_REMATCH[2]}.${BASH_REMATCH[3]}"
+            beta_number="${BASH_REMATCH[4]}"
+            if [[ "$IS_BETA" == "true" ]]; then
+              if [[ -z "$beta_number" ]]; then
+                next_version="${base_version}-beta1"
+              else
+                next_version="${base_version}-beta$((beta_number + 1))"
+              fi
+            else
+              next_version="$base_version"
+            fi
+          else
+            current_version="${latest_stable:-0.0.0}"
+            IFS=. read -r major minor patch <<< "$current_version"
+            case "$release_type" in
+              major) incremented_version="$((major + 1)).0.0" ;;
+              minor) incremented_version="${major}.$((minor + 1)).0" ;;
+              patch) incremented_version="${major}.${minor}.$((patch + 1))" ;;
+              *) echo "Unsupported release type: $release_type" >&2; exit 1 ;;
+            esac
+
+            if [[ "$IS_BETA" == "true" ]]; then
+              next_version="${incremented_version}-beta"
+            else
+              next_version="$incremented_version"
+            fi
+          fi
+
+          echo "version=$next_version" >> "$GITHUB_OUTPUT"
+          echo "last_version=$changelog_base" >> "$GITHUB_OUTPUT"
+          {
+            echo "### Release calculation"
+            echo
+            echo "- Previous published release: \`${changelog_base:-none}\`"
+            echo "- Release type: \`$release_type\`"
+            echo "- Next version: \`$next_version\`"
+          } >> "$GITHUB_STEP_SUMMARY"
+
+  build:
+    name: Build
+    uses: ./.github/workflows/_build.yml
+    needs: setup
+    with:
+      release_version: ${{ needs.setup.outputs.version }}
+    secrets: inherit
+
+  draft-release:
+    name: Prepare draft release
+    runs-on: ubuntu-24.04
+    needs:
+      - setup
+      - build
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
+        with:
+          fetch-depth: 0
+
+      - name: Build changelog
+        uses: mikepenz/release-changelog-builder-action@439f79b5b5428107c7688c1d2b0e8bacc9b8792c # v6.0.1
+        with:
+          fromTag: ${{ needs.setup.outputs.last_version }}
+          toTag: ${{ github.sha }}
+          ignorePreReleases: ${{ !inputs.beta }}
+          outputFile: changelog.md
+          configurationJson: |
+            {
+              "template": "#{{CHANGELOG}}",
+              "categories": [
+                {
+                  "title": "## 🚀 Features",
+                  "labels": ["feat", "feature", "version:major", "version:minor"]
+                },
+                {
+                  "title": "## 🐛 Fixes",
+                  "labels": ["fix", "bug", "bugfix", "version:patch"]
+                }
+              ],
+              "ignore_labels": [
+                "version:skip",
+                "renovate",
+                "dependencies",
+                "skip-changelog"
+              ],
+              "empty_template": "Enhancements and bug fixes.",
+              "pr_template": "- #{{TITLE}}"
+            }
+
+      - name: Summarize changelog
+        run: |
+          echo "## Changelog" >> "$GITHUB_STEP_SUMMARY"
+          cat changelog.md >> "$GITHUB_STEP_SUMMARY"
+
+      - name: Download release APK
+        uses: actions/download-artifact@37930b1c2abaa49bbe596cd826c3c89aef350131 # v7.0.0
+        with:
+          name: karoo-hass-companion.apk
+
+      - name: Convert changelog to plain text
+        run: |
+          sudo apt-get update
+          sudo apt-get install --yes pandoc
+          pandoc changelog.md --from markdown-emoji --to plain --output changelog.txt
+
+      - name: Calculate APK checksum
+        id: checksum
+        run: |
+          checksum=$(sha256sum karoo-hass-companion.apk | awk '{print $1}')
+          echo "checksum=$checksum" >> "$GITHUB_OUTPUT"
+
+      - name: Prepare Karoo manifest
+        run: |
+          ./.github/scripts/prepare-manifest.sh \
+            "${{ needs.setup.outputs.version }}" \
+            "${{ github.run_number }}" \
+            changelog.txt \
+            "${{ steps.checksum.outputs.checksum }}"
+
+      - name: Summarize manifest
+        run: |
+          {
+            echo "## Karoo manifest"
+            echo '```json'
+            cat manifest.json
+            echo '```'
+          } >> "$GITHUB_STEP_SUMMARY"
+
+      - name: Create or update draft release
+        uses: ncipollo/release-action@b7eabc95ff50cbeeedec83973935c8f306dfcd0b # v1.20.0
+        with:
+          tag: ${{ needs.setup.outputs.version }}
+          commit: ${{ github.sha }}
+          name: ${{ needs.setup.outputs.version }}
+          bodyFile: changelog.md
+          allowUpdates: true
+          draft: true
+          prerelease: ${{ inputs.beta }}
+          artifactErrorsFailBuild: true
+          artifacts: |
+            karoo-hass-companion.apk
+            manifest.json
+            resources/karoo-hass-companion-icon.png
+
+  approve-release:
+    name: Approve release
+    needs:
+      - draft-release
+    runs-on: ubuntu-24.04
+    environment: production
+    steps:
+      - name: Confirm approval
+        run: echo "Production release approved."
+
+  release:
+    name: Publish release
+    needs:
+      - setup
+      - approve-release
+    runs-on: ubuntu-24.04
+    steps:
+      - name: Publish release
+        uses: ncipollo/release-action@b7eabc95ff50cbeeedec83973935c8f306dfcd0b # v1.20.0
+        with:
+          tag: ${{ needs.setup.outputs.version }}
+          name: ${{ needs.setup.outputs.version }}
+          allowUpdates: true
+          updateOnlyUnreleased: true
+          omitBodyDuringUpdate: true
+          draft: false
+          prerelease: ${{ inputs.beta }}
