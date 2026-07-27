@@ -9,8 +9,8 @@ import androidx.activity.ComponentActivity
 import com.karoohass.R
 import com.karoohass.network.DirectWifiTransport
 import com.karoohass.network.HttpRequest
+import com.karoohass.network.HttpTransport
 import com.karoohass.security.TokenStore
-import kotlinx.coroutines.runBlocking
 import org.json.JSONObject
 import java.net.URI
 import java.net.URLEncoder
@@ -46,9 +46,9 @@ class OAuthManager(private val context: Context, private val tokenStore: TokenSt
         tokenStore.save(com.karoohass.security.Tokens(body.getString("access_token"), body.optString("refresh_token").ifBlank { null }, System.currentTimeMillis() + expires * 1000))
         clearCallback(); return true
     }
-    suspend fun refresh(): Boolean {
+    suspend fun refresh(transport: HttpTransport = DirectWifiTransport(context)): Boolean {
         val tokens = tokenStore.load() ?: return false; val origin = prefs.getString("origin", null) ?: return false; val refresh = tokens.refreshToken ?: return false
-        val response = runCatching { DirectWifiTransport(context).execute(HttpRequest("POST", "$origin/auth/token", mapOf("Content-Type" to "application/x-www-form-urlencoded"), "grant_type=refresh_token&refresh_token=${encode(refresh)}&client_id=${encode(clientId)}".toByteArray())) }.getOrNull() ?: return false
+        val response = runCatching { transport.execute(HttpRequest("POST", "$origin/auth/token", mapOf("Content-Type" to "application/x-www-form-urlencoded"), "grant_type=refresh_token&refresh_token=${encode(refresh)}&client_id=${encode(clientId)}".toByteArray())) }.getOrNull() ?: return false
         if (response.code !in 200..299 || response.body == null) return false; val body = JSONObject(String(response.body)); tokenStore.save(com.karoohass.security.Tokens(body.getString("access_token"), body.optString("refresh_token", refresh), System.currentTimeMillis() + body.optLong("expires_in", 1800) * 1000)); return true
     }
     suspend fun revoke() { tokenStore.load()?.refreshToken?.let { token -> prefs.getString("origin", null)?.let { origin -> runCatching { DirectWifiTransport(context).execute(HttpRequest("POST", "$origin/auth/revoke", mapOf("Content-Type" to "application/x-www-form-urlencoded"), "token=${encode(token)}&client_id=${encode(clientId)}".toByteArray())) } } }; tokenStore.clear() }

@@ -36,6 +36,18 @@ data class AppSettings(
     val actions: List<QuickAccessAction> = emptyList(),
 )
 
+fun EntitySnapshot.availableActionKinds(): List<ActionKind> = when (domain) {
+    "script" -> listOf(ActionKind.RUN_SCRIPT)
+    "lock" -> listOf(ActionKind.LOCK, ActionKind.UNLOCK)
+    "cover" -> buildList {
+        if (supportedFeatures and COVER_SUPPORT_OPEN != 0) add(ActionKind.OPEN_COVER)
+        if (supportedFeatures and COVER_SUPPORT_CLOSE != 0) add(ActionKind.CLOSE_COVER)
+        if (supportedFeatures and COVER_SUPPORT_STOP != 0) add(ActionKind.STOP_COVER)
+    }
+    "light", "switch" -> listOf(ActionKind.TOGGLE)
+    else -> emptyList()
+}
+
 fun ActionKind.serviceName(): String = when (this) {
     ActionKind.RUN_SCRIPT -> "turn_on"
     ActionKind.LOCK -> "lock"
@@ -67,3 +79,7 @@ fun QuickAccessAction.label(entity: EntitySnapshot? = null): String {
     }
     return "$operation ${entity?.friendlyName ?: displayName ?: entityId}"
 }
+
+private const val COVER_SUPPORT_OPEN = 1
+private const val COVER_SUPPORT_CLOSE = 2
+private const val COVER_SUPPORT_STOP = 8

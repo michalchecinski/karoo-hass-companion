@@ -10,6 +10,7 @@ import com.karoohass.core.*
 import com.karoohass.network.*
 import com.karoohass.security.PinStore
 import com.karoohass.security.TokenStore
+import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.StateFlow
@@ -28,6 +29,7 @@ data class UiState(
     val busy: Boolean = false,
     val message: String? = null,
     val outcome: ActionOutcome? = null,
+    val outcomeActionId: String? = null,
     val pending: QuickAccessAction? = null,
     val authorizedUntil: Long = 0,
     val unlocking: Boolean = false,
@@ -47,20 +49,22 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
     private val message = MutableStateFlow<String?>(null)
     private val pending = MutableStateFlow<QuickAccessAction?>(null)
     private val outcome = MutableStateFlow<ActionOutcome?>(null)
+    private val outcomeActionId = MutableStateFlow<String?>(null)
     private val authorizedUntil = MutableStateFlow(0L)
     private val unlocking = MutableStateFlow(false)
     private val wholeAppLocked = MutableStateFlow(true)
     private var authorizationUrl: String? = null
-    private val policyTransport = PolicyTransport({ state.value.settings.connectionPolicy }, DirectWifiTransport(application), KarooTransport(application))
-    private val repository = HomeAssistantRepository({ state.value.settings.origin }, policyTransport, tokens) { oauth.refresh() }
-    private val wifiRepository = HomeAssistantRepository({ state.value.settings.origin }, DirectWifiTransport(application), tokens) { oauth.refresh() }
+    private val directTransport = DirectWifiTransport(application)
+    private val policyTransport = PolicyTransport({ state.value.settings.connectionPolicy }, directTransport, KarooTransport(application))
+    private val repository = HomeAssistantRepository({ state.value.settings.origin }, policyTransport, tokens) { oauth.refresh(policyTransport) }
+    private val wifiRepository = HomeAssistantRepository({ state.value.settings.origin }, directTransport, tokens) { oauth.refresh(directTransport) }
     val state: StateFlow<UiState> = combine(
         combine(rawSettings, screen) { settings, current -> settings to current },
         combine(snapshots, work) { loaded, isBusy -> loaded to isBusy },
         combine(message, pending) { notice, request -> notice to request },
-        combine(outcome, authorizedUntil, unlocking, wholeAppLocked) { result, auth, isUnlocking, isWholeAppLocked -> PinUiState(result, auth, isUnlocking, isWholeAppLocked) },
+        combine(outcome, outcomeActionId, authorizedUntil, unlocking, wholeAppLocked) { result, actionId, auth, isUnlocking, isWholeAppLocked -> PinUiState(result, actionId, auth, isUnlocking, isWholeAppLocked) },
     ) { settingsAndScreen, snapshotsAndWork, messageAndPending, outcomeAndAuth ->
-        UiState(settingsAndScreen.first, snapshotsAndWork.first, settingsAndScreen.second, snapshotsAndWork.second, messageAndPending.first, outcomeAndAuth.outcome, messageAndPending.second, outcomeAndAuth.authorizedUntil, outcomeAndAuth.unlocking, outcomeAndAuth.wholeAppLocked)
+        UiState(settingsAndScreen.first, snapshotsAndWork.first, settingsAndScreen.second, snapshotsAndWork.second, messageAndPending.first, outcomeAndAuth.outcome, outcomeAndAuth.actionId, messageAndPending.second, outcomeAndAuth.authorizedUntil, outcomeAndAuth.unlocking, outcomeAndAuth.wholeAppLocked)
     }.stateIn(viewModelScope, SharingStarted.Eagerly, UiState())
 
     init {
@@ -200,45 +204,63 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
     }
     fun confirm(action: QuickAccessAction) = begin(action)
     private fun begin(action: QuickAccessAction) = viewModelScope.launch {
-        var snapshot = snapshots.value[action.entityId]
-        val needsCurrentState = action.kind.expectedState() != null || action.kind == ActionKind.TOGGLE
-        if (needsCurrentState && (snapshot == null || System.currentTimeMillis() - snapshot.fetchedAt > 60_000)) {
-            val refreshed = runCatching { repository.refresh(action.entityId) }.getOrNull()
-            if (refreshed == null || !refreshed.available) {
-                if (action.kind.expectedState() != null) {
-                    outcome.value = ActionOutcome.FAILED
-                    message.value = "Action unavailable: state could not be refreshed"
-                    return@launch
-                }
-            } else {
-                snapshot = refreshed
-                snapshots.value = snapshots.value + (action.entityId to refreshed)
-            }
-        }
+        outcomeActionId.value = action.id
+        outcome.value = null
+        message.value = null
         work.value = true
-        outcome.value = ActionOutcome.SENDING
-        val requested = repository.execute(action)
-        outcome.value = requested
-        val expected = action.kind.expectedState()
-        val updated = when {
-            requested == ActionOutcome.SENDING && expected != null -> repository.awaitState(action.entityId) { it.state == expected }
-            requested == ActionOutcome.REQUESTED && action.kind == ActionKind.TOGGLE -> repository.awaitState(action.entityId) { snapshot == null || it.state != snapshot.state }
-            else -> null
-        }
-        if (updated != null) {
-            snapshots.value = snapshots.value + (action.entityId to updated)
-            outcome.value = ActionOutcome.COMPLETED
-        } else if (requested == ActionOutcome.SENDING || action.kind == ActionKind.TOGGLE) {
+        try {
+            var snapshot = snapshots.value[action.entityId]
+            val needsCurrentState = action.kind.expectedState() != null || action.kind == ActionKind.TOGGLE
+            if (needsCurrentState && (snapshot == null || System.currentTimeMillis() - snapshot.fetchedAt > 60_000)) {
+                val refreshed = runCatching { repository.refresh(action.entityId) }.getOrNull()
+                if (refreshed == null || !refreshed.available) {
+                    if (action.kind.expectedState() != null) {
+                        outcome.value = ActionOutcome.FAILED
+                        message.value = "Action unavailable: state could not be refreshed"
+                        return@launch
+                    }
+                } else {
+                    snapshot = refreshed
+                    snapshots.value = snapshots.value + (action.entityId to refreshed)
+                }
+            }
+            outcome.value = ActionOutcome.SENDING
+            val requested = repository.execute(action)
+            outcome.value = requested
+            val expected = action.kind.expectedState()
+            val updated = when {
+                requested == ActionOutcome.SENDING && expected != null -> repository.awaitState(action.entityId) { it.state == expected }
+                requested == ActionOutcome.REQUESTED && action.kind == ActionKind.TOGGLE -> repository.awaitState(action.entityId) { snapshot == null || it.state != snapshot.state }
+                else -> null
+            }
+            if (updated != null) {
+                snapshots.value = snapshots.value + (action.entityId to updated)
+                outcome.value = ActionOutcome.COMPLETED
+            } else if (requested == ActionOutcome.SENDING || action.kind == ActionKind.TOGGLE) {
+                outcome.value = ActionOutcome.UNKNOWN
+            }
+            message.value = when (outcome.value) {
+                ActionOutcome.FAILED -> "Action was not sent. Please try again."
+                ActionOutcome.UNKNOWN -> "Action outcome is uncertain."
+                else -> null
+            }
+        } catch (error: CancellationException) {
+            throw error
+        } catch (error: Exception) {
             outcome.value = ActionOutcome.UNKNOWN
+            message.value = "Action outcome is uncertain."
+            Log.e("KarooHassAction", "Action failed unexpectedly", error)
+        } finally {
+            work.value = false
         }
-        work.value = false
     }
-    fun signOutAndReset() = viewModelScope.launch { oauth.revoke(); pinStore.clear(); settingsStore.update { AppSettings() }; snapshots.value = emptyMap(); wholeAppLocked.value = false; screen.value = Screen.SETUP }
+    fun signOutAndReset() = viewModelScope.launch { oauth.revoke(); pinStore.clear(); settingsStore.update { AppSettings() }; snapshots.value = emptyMap(); outcome.value = null; outcomeActionId.value = null; wholeAppLocked.value = false; screen.value = Screen.SETUP }
     fun foregroundChanged(foreground: Boolean) { if (!foreground && state.value.settings.pinMode == PinMode.WHOLE_APP) { authorizedUntil.value = 0; wholeAppLocked.value = true } }
     fun enforceWholeAppPin() { if (state.value.settings.pinMode == PinMode.WHOLE_APP && state.value.settings.origin != null) wholeAppLocked.value = true }
 
     private data class PinUiState(
         val outcome: ActionOutcome?,
+        val actionId: String?,
         val authorizedUntil: Long,
         val unlocking: Boolean,
         val wholeAppLocked: Boolean,

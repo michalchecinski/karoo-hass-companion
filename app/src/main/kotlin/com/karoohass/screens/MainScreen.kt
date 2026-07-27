@@ -44,8 +44,8 @@ import com.karoohass.core.*
 fun MainScreen(state: UiState, model: MainViewModel) {
     var confirm by remember { mutableStateOf<QuickAccessAction?>(null) }
     val displayedScreen = if (
-        state.screen == Screen.HOME &&
         state.settings.origin != null &&
+        state.settings.pinMode == PinMode.WHOLE_APP &&
         state.wholeAppLocked
     ) Screen.PIN else state.screen
     Scaffold { padding ->
@@ -80,7 +80,70 @@ fun MainScreen(state: UiState, model: MainViewModel) {
 @Composable private fun Home(state: UiState, invoke: (QuickAccessAction) -> Unit, setup: () -> Unit) {
     if (state.settings.origin == null) { Empty("Connect to Home Assistant to add Quick Access controls.", "Set up", setup); return }
     if (state.settings.actions.isEmpty()) { Empty("No Quick Access actions yet.", "Manage actions", setup); return }
-    LazyVerticalGrid(GridCells.Fixed(2), contentPadding = PaddingValues(10.dp), verticalArrangement = Arrangement.spacedBy(8.dp), horizontalArrangement = Arrangement.spacedBy(8.dp)) { items(state.settings.actions.size) { index -> val action = state.settings.actions[index]; val entity = state.snapshots[action.entityId]; ElevatedCard(Modifier.heightIn(min = 110.dp).fillMaxWidth().clickable(enabled = !state.busy && (entity?.available != false)) { invoke(action) }) { Column(Modifier.padding(12.dp), verticalArrangement = Arrangement.SpaceBetween) { Box(Modifier.fillMaxWidth(), contentAlignment = Alignment.Center) { HomeAssistantIcon(action.icon ?: entity?.icon, action.domain) }; Text(entity?.friendlyName ?: action.displayName ?: action.entityId, modifier = Modifier.fillMaxWidth(), style = MaterialTheme.typography.bodySmall, textAlign = TextAlign.Center, maxLines = 3, overflow = TextOverflow.Ellipsis); if (action.kind != ActionKind.RUN_SCRIPT) Text(when { state.busy -> "Loading…"; entity == null -> "State unavailable"; !entity.available -> "Unavailable"; else -> entity.state }, modifier = Modifier.fillMaxWidth(), textAlign = TextAlign.Center, color = if (entity?.available == false) MaterialTheme.colorScheme.error else MaterialTheme.colorScheme.onSurfaceVariant); if (action.protected) Text("PIN protected", modifier = Modifier.fillMaxWidth(), textAlign = TextAlign.Center, style = MaterialTheme.typography.labelSmall) } } } }
+    LazyVerticalGrid(
+        GridCells.Fixed(2),
+        contentPadding = PaddingValues(10.dp),
+        verticalArrangement = Arrangement.spacedBy(8.dp),
+        horizontalArrangement = Arrangement.spacedBy(8.dp),
+    ) {
+        items(state.settings.actions.size) { index ->
+            val action = state.settings.actions[index]
+            val entity = state.snapshots[action.entityId]
+            val actionOutcome = state.outcome.takeIf { state.outcomeActionId == action.id }
+            ElevatedCard(
+                Modifier
+                    .heightIn(min = 110.dp)
+                    .fillMaxWidth()
+                    .clickable(enabled = !state.busy && (entity?.available != false)) { invoke(action) },
+            ) {
+                Column(Modifier.padding(12.dp), verticalArrangement = Arrangement.SpaceBetween) {
+                    Box(Modifier.fillMaxWidth(), contentAlignment = Alignment.Center) {
+                        HomeAssistantIcon(action.icon ?: entity?.icon, action.domain)
+                    }
+                    Text(
+                        entity?.friendlyName ?: action.displayName ?: action.entityId,
+                        modifier = Modifier.fillMaxWidth(),
+                        style = MaterialTheme.typography.bodySmall,
+                        textAlign = TextAlign.Center,
+                        maxLines = 3,
+                        overflow = TextOverflow.Ellipsis,
+                    )
+                    if (actionOutcome != null) {
+                        Text(
+                            actionOutcome.statusText(),
+                            modifier = Modifier.fillMaxWidth(),
+                            textAlign = TextAlign.Center,
+                            color = if (actionOutcome in setOf(ActionOutcome.FAILED, ActionOutcome.UNKNOWN)) MaterialTheme.colorScheme.error else MaterialTheme.colorScheme.primary,
+                        )
+                    }
+                    if (action.kind != ActionKind.RUN_SCRIPT) {
+                        Text(
+                            when {
+                                state.busy && actionOutcome == null -> "Loading…"
+                                entity == null -> "State unavailable"
+                                !entity.available -> "Unavailable"
+                                else -> entity.state
+                            },
+                            modifier = Modifier.fillMaxWidth(),
+                            textAlign = TextAlign.Center,
+                            color = if (entity?.available == false) MaterialTheme.colorScheme.error else MaterialTheme.colorScheme.onSurfaceVariant,
+                        )
+                    }
+                    if (action.protected) {
+                        Text("PIN protected", modifier = Modifier.fillMaxWidth(), textAlign = TextAlign.Center, style = MaterialTheme.typography.labelSmall)
+                    }
+                }
+            }
+        }
+    }
+}
+
+private fun ActionOutcome.statusText() = when (this) {
+    ActionOutcome.SENDING -> "Sending…"
+    ActionOutcome.REQUESTED -> "Requested"
+    ActionOutcome.COMPLETED -> "Completed"
+    ActionOutcome.FAILED -> "Failed"
+    ActionOutcome.UNKNOWN -> "Outcome uncertain"
 }
 
 @Composable
@@ -285,21 +348,24 @@ private fun openOAuthCallback(context: android.content.Context, uri: Uri, onCall
 
 @Composable
 private fun ActionPicker(entity: EntitySnapshot, protect: Boolean, confirmation: Boolean, setProtect: (Boolean) -> Unit, setConfirmation: (Boolean) -> Unit, add: (ActionKind) -> Unit, dismiss: () -> Unit) {
-    val kinds = when (entity.domain) {
-        "script" -> listOf(ActionKind.RUN_SCRIPT)
-        "lock" -> listOf(ActionKind.LOCK, ActionKind.UNLOCK)
-        "cover" -> listOf(ActionKind.OPEN_COVER, ActionKind.CLOSE_COVER, ActionKind.STOP_COVER)
-        else -> listOf(ActionKind.TOGGLE)
-    }
+    val kinds = entity.availableActionKinds()
     val singleKind = kinds.singleOrNull()
     AlertDialog(
         onDismissRequest = dismiss,
         title = { Text(entity.friendlyName) },
         text = {
             Column {
-                Text(if (singleKind == ActionKind.TOGGLE) "Add a toggle action." else "Choose operation")
-                Row(verticalAlignment = Alignment.CenterVertically) { Checkbox(protect, setProtect); Text("Require PIN") }
-                Row(verticalAlignment = Alignment.CenterVertically) { Checkbox(confirmation, setConfirmation); Text("Confirm action") }
+                Text(
+                    when {
+                        kinds.isEmpty() -> "This entity reports no supported Quick Access actions."
+                        singleKind == ActionKind.TOGGLE -> "Add a toggle action."
+                        else -> "Choose operation"
+                    },
+                )
+                if (kinds.isNotEmpty()) {
+                    Row(verticalAlignment = Alignment.CenterVertically) { Checkbox(protect, setProtect); Text("Require PIN") }
+                    Row(verticalAlignment = Alignment.CenterVertically) { Checkbox(confirmation, setConfirmation); Text("Confirm action") }
+                }
                 if (singleKind == null) kinds.forEach { kind -> TextButton(onClick = { add(kind) }) { Text(kind.label()) } }
             }
         },

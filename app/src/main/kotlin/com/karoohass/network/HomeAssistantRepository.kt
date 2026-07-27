@@ -33,7 +33,15 @@ class HomeAssistantRepository(
         val base = origin() ?: throw TransportException.Failure("Home Assistant is not configured")
         var token = tokens.load()?.accessToken ?: throw TransportException.Failure("Sign in is required")
         var response = transport.execute(HttpRequest(method, "$base$path", mapOf("Authorization" to "Bearer $token", "Content-Type" to "application/json"), body))
-        if (response.code == 401 && refresh()) { token = tokens.load()?.accessToken ?: token; response = transport.execute(HttpRequest(method, "$base$path", mapOf("Authorization" to "Bearer $token", "Content-Type" to "application/json"), body)) }
+        if (response.code == 401) {
+            val refreshed = refresh()
+            // Service POSTs are never replayed automatically. The refreshed token is
+            // retained so the user can deliberately invoke the action again.
+            if (refreshed && method in setOf("GET", "HEAD")) {
+                token = tokens.load()?.accessToken ?: token
+                response = transport.execute(HttpRequest(method, "$base$path", mapOf("Authorization" to "Bearer $token", "Content-Type" to "application/json"), body))
+            }
+        }
         return response
     }
     private fun parseStates(items: JSONArray) = List(items.length()) { parseState(items.getJSONObject(it)) }.filter { it.domain in supportedDomains }
