@@ -9,6 +9,10 @@ on:
         type: boolean
         default: false
 
+concurrency:
+  group: release
+  cancel-in-progress: false
+
 permissions:
   contents: write
   actions: read
@@ -61,8 +65,9 @@ jobs:
           if [[ -z "$changelog_base" ]]; then
             release_type="minor"
           else
-            commit_messages=$(git log "$changelog_base..HEAD" --format="%s")
-            pr_numbers=$(grep -oE '#[0-9]+' <<< "$commit_messages" | tr -d '#' | sort -u || true)
+            pr_numbers=$(git log "$changelog_base..HEAD" --format="%s" \
+              | sed -nE 's/.* \(#([0-9]+)\)$/\1/p' \
+              | sort -u)
 
             if [[ -z "$pr_numbers" ]]; then
               echo "No squash-merged pull requests found since $changelog_base." >&2
@@ -150,9 +155,11 @@ jobs:
     secrets: inherit
 
   draft-release:
-    name: Create draft release
+    name: Prepare draft release
     runs-on: ubuntu-24.04
-    needs: setup
+    needs:
+      - setup
+      - build
     steps:
       - name: Checkout repository
         uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
@@ -194,48 +201,10 @@ jobs:
           echo "## Changelog" >> "$GITHUB_STEP_SUMMARY"
           cat changelog.md >> "$GITHUB_STEP_SUMMARY"
 
-      - name: Create or update draft release
-        uses: ncipollo/release-action@b7eabc95ff50cbeeedec83973935c8f306dfcd0b # v1.20.0
-        with:
-          tag: ${{ needs.setup.outputs.version }}
-          name: ${{ needs.setup.outputs.version }}
-          bodyFile: changelog.md
-          allowUpdates: true
-          draft: true
-          prerelease: ${{ inputs.beta }}
-
-  approve-release:
-    name: Approve release
-    needs:
-      - draft-release
-    runs-on: ubuntu-24.04
-    environment: production
-    steps:
-      - name: Confirm approval
-        run: echo "Production release approved."
-
-  release:
-    name: Publish release
-    needs:
-      - setup
-      - build
-      - approve-release
-    runs-on: ubuntu-24.04
-    steps:
-      - name: Checkout repository
-        uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
-        with:
-          fetch-depth: 0
-
       - name: Download release APK
         uses: actions/download-artifact@37930b1c2abaa49bbe596cd826c3c89aef350131 # v7.0.0
         with:
           name: karoo-hass-companion.apk
-
-      - name: Download draft release body
-        env:
-          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-        run: gh release view "${{ needs.setup.outputs.version }}" --json body --template '{{.body}}' > changelog.md
 
       - name: Convert changelog to plain text
         run: |
@@ -266,15 +235,46 @@ jobs:
             echo '```'
           } >> "$GITHUB_STEP_SUMMARY"
 
+      - name: Create or update draft release
+        uses: ncipollo/release-action@b7eabc95ff50cbeeedec83973935c8f306dfcd0b # v1.20.0
+        with:
+          tag: ${{ needs.setup.outputs.version }}
+          commit: ${{ github.sha }}
+          name: ${{ needs.setup.outputs.version }}
+          bodyFile: changelog.md
+          allowUpdates: true
+          draft: true
+          prerelease: ${{ inputs.beta }}
+          artifactErrorsFailBuild: true
+          artifacts: |
+            karoo-hass-companion.apk
+            manifest.json
+            resources/karoo-hass-companion-icon.png
+
+  approve-release:
+    name: Approve release
+    needs:
+      - draft-release
+    runs-on: ubuntu-24.04
+    environment: production
+    steps:
+      - name: Confirm approval
+        run: echo "Production release approved."
+
+  release:
+    name: Publish release
+    needs:
+      - setup
+      - approve-release
+    runs-on: ubuntu-24.04
+    steps:
       - name: Publish release
         uses: ncipollo/release-action@b7eabc95ff50cbeeedec83973935c8f306dfcd0b # v1.20.0
         with:
           tag: ${{ needs.setup.outputs.version }}
           name: ${{ needs.setup.outputs.version }}
           allowUpdates: true
+          updateOnlyUnreleased: true
+          omitBodyDuringUpdate: true
           draft: false
           prerelease: ${{ inputs.beta }}
-          artifacts: |
-            karoo-hass-companion.apk
-            manifest.json
-            resources/karoo-hass-companion-icon.png

@@ -53,6 +53,8 @@ C1:EB:70:90:AE:A8:09:A8:1D:D3:C5:70:E3:24:BF:88:FD:4C:9C:6A:33:95:48:CF:E8:03:34
 
 The workflow uses the GitHub run number as Android `versionCode`. It will not publish from a branch other than `main`, and a rerun updates the same draft instead of incrementing from an unpublished tag.
 
+Installed builds discover updates through the latest stable GitHub release manifest. Beta releases are available for manual testing but do not form a separate automatic-update channel; beta installations receive an update when a newer stable release is published.
+
 ## Recovery and rollback
 
 - A failed or cancelled run may leave a draft release. Correct the problem and rerun the workflow; do not create a replacement tag manually.
