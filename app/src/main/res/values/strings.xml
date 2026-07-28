@@ -1,5 +1,5 @@
 <resources>
     <string name="app_name">Karoo Home Assistant Companion</string>
-    <string name="hello_karoo">Hello Karoo!</string>
-    <string name="extension_name">Karoo Home Assistant Companion</string>
+    <string name="oauth_client_id">https://michalchecinski.github.io/karoo-hass-companion/</string>
+    <string name="oauth_redirect_uri">https://michalchecinski.github.io/karoo-hass-companion/auth-callback</string>
 </resources>

@@ -57,6 +57,9 @@ android {
         targetSdk = 34
         versionCode = buildNumber ?: 1
         versionName = releaseVersion ?: "0.1.0-dev"
+        ndk {
+            abiFilters += "arm64-v8a"
+        }
     }
 
     signingConfigs {
@@ -89,6 +92,13 @@ android {
     buildFeatures {
         compose = true
     }
+    // AGP 8.2 cannot 16 KB zip-align uncompressed native dependencies. Compressing
+    // them is the Android-documented compatibility path until the build plugin moves.
+    packaging {
+        jniLibs {
+            useLegacyPackaging = true
+        }
+    }
 }
 
 dependencies {
@@ -97,4 +107,5 @@ dependencies {
     implementation(libs.bundles.androidx.lifeycle)
     implementation(libs.androidx.activity.compose)
     implementation(libs.bundles.compose.ui)
+    testImplementation(libs.junit)
 }
