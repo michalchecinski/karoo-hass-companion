@@ -28,6 +28,11 @@ class MainActivity : ComponentActivity() {
         model.enforceWholeAppPin()
     }
 
+    override fun onUserInteraction() {
+        super.onUserInteraction()
+        model.onUserInteraction()
+    }
+
     override fun onStop() {
         model.foregroundChanged(false)
         super.onStop()

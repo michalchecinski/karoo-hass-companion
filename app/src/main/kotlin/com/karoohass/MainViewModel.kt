@@ -2,6 +2,7 @@ package com.karoohass
 
 import android.app.Application
 import android.net.Uri
+import android.os.SystemClock
 import android.util.Log
 import androidx.lifecycle.AndroidViewModel
 import androidx.lifecycle.viewModelScope
@@ -19,10 +20,15 @@ import com.karoohass.network.DirectWifiTransport
 import com.karoohass.network.HomeAssistantRepository
 import com.karoohass.network.KarooTransport
 import com.karoohass.network.PolicyTransport
+import com.karoohass.security.IdleLockCancellation
+import com.karoohass.security.IdleLockScheduler
 import com.karoohass.security.PinStore
 import com.karoohass.security.TokenStore
+import com.karoohass.security.WHOLE_APP_IDLE_TIMEOUT_MILLIS
+import com.karoohass.security.WholeAppIdleLockController
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.StateFlow
@@ -42,7 +48,6 @@ data class UiState(
     val outcome: ActionOutcome? = null,
     val outcomeActionId: String? = null,
     val pending: QuickAccessAction? = null,
-    val authorizedUntil: Long = 0,
     val unlocking: Boolean = false,
     val wholeAppLocked: Boolean = false,
 )
@@ -62,9 +67,23 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
     private val pending = MutableStateFlow<QuickAccessAction?>(null)
     private val outcome = MutableStateFlow<ActionOutcome?>(null)
     private val outcomeActionId = MutableStateFlow<String?>(null)
-    private val authorizedUntil = MutableStateFlow(0L)
     private val unlocking = MutableStateFlow(false)
     private val wholeAppLocked = MutableStateFlow(true)
+    private val idleLockController =
+        WholeAppIdleLockController(
+            timeoutMillis = WHOLE_APP_IDLE_TIMEOUT_MILLIS,
+            nowMillis = { SystemClock.elapsedRealtime() },
+            scheduler =
+                IdleLockScheduler { delayMillis, action ->
+                    val job =
+                        viewModelScope.launch {
+                            delay(delayMillis)
+                            action()
+                        }
+                    IdleLockCancellation(job::cancel)
+                },
+            onLock = { wholeAppLocked.value = true },
+        )
     private var authorizationUrl: String? = null
     private val directTransport = DirectWifiTransport(application)
     private val policyTransport = PolicyTransport({ state.value.settings.connectionPolicy }, directTransport, KarooTransport(application))
@@ -75,9 +94,22 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
             combine(rawSettings, screen) { settings, current -> settings to current },
             combine(snapshots, work) { loaded, isBusy -> loaded to isBusy },
             combine(message, pending) { notice, request -> notice to request },
-            combine(outcome, outcomeActionId, authorizedUntil, unlocking, wholeAppLocked) { result, actionId, auth, isUnlocking, isWholeAppLocked -> PinUiState(result, actionId, auth, isUnlocking, isWholeAppLocked) },
+            combine(outcome, outcomeActionId, unlocking, wholeAppLocked) { result, actionId, isUnlocking, isWholeAppLocked ->
+                PinUiState(result, actionId, isUnlocking, isWholeAppLocked)
+            },
         ) { settingsAndScreen, snapshotsAndWork, messageAndPending, outcomeAndAuth ->
-            UiState(settingsAndScreen.first, snapshotsAndWork.first, settingsAndScreen.second, snapshotsAndWork.second, messageAndPending.first, outcomeAndAuth.outcome, outcomeAndAuth.actionId, messageAndPending.second, outcomeAndAuth.authorizedUntil, outcomeAndAuth.unlocking, outcomeAndAuth.wholeAppLocked)
+            UiState(
+                settings = settingsAndScreen.first,
+                snapshots = snapshotsAndWork.first,
+                screen = settingsAndScreen.second,
+                busy = snapshotsAndWork.second,
+                message = messageAndPending.first,
+                outcome = outcomeAndAuth.outcome,
+                outcomeActionId = outcomeAndAuth.actionId,
+                pending = messageAndPending.second,
+                unlocking = outcomeAndAuth.unlocking,
+                wholeAppLocked = outcomeAndAuth.wholeAppLocked,
+            )
         }.stateIn(viewModelScope, SharingStarted.Eagerly, UiState())
 
     init {
@@ -187,7 +219,12 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
             val pinSet = if (!pinStore.configured()) withContext(Dispatchers.Default) { runCatching { pinStore.set(pin!!) } } else Result.success(Unit)
             if (pinSet.isSuccess) {
                 settingsStore.update { it.copy(pinMode = mode) }
-                if (mode == PinMode.WHOLE_APP) wholeAppLocked.value = true
+                if (mode == PinMode.WHOLE_APP) {
+                    idleLockController.lockNow()
+                } else {
+                    idleLockController.clear()
+                    wholeAppLocked.value = false
+                }
                 message.value = "PIN protection saved"
             } else {
                 message.value = "PIN must contain 4–6 digits"
@@ -204,6 +241,7 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
                 is com.karoohass.security.PinResult.Success -> {
                     pinStore.clear()
                     settingsStore.update { it.copy(pinMode = PinMode.DISABLED) }
+                    idleLockController.clear()
                     wholeAppLocked.value = false
                     message.value = "PIN protection disabled"
                 }
@@ -253,9 +291,13 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
         }
 
     fun invoke(action: QuickAccessAction) {
-        val needsAuth = state.value.settings.pinMode == PinMode.WHOLE_APP && System.currentTimeMillis() >= authorizedUntil.value || state.value.settings.pinMode == PinMode.SELECTED_ACTIONS && action.protected
+        val wholeAppProtected = state.value.settings.pinMode == PinMode.WHOLE_APP
+        val selectedActionProtected =
+            state.value.settings.pinMode == PinMode.SELECTED_ACTIONS &&
+                action.protected
+        val needsAuth = wholeAppProtected && wholeAppLocked.value || selectedActionProtected
         if (needsAuth) {
-            pending.value = action
+            pending.value = if (wholeAppProtected) null else action
             screen.value = Screen.PIN
         } else {
             begin(action)
@@ -274,8 +316,8 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
                     val action = pending.value
                     val wholeAppProtected = state.value.settings.pinMode == PinMode.WHOLE_APP
                     if (wholeAppProtected) {
-                        authorizedUntil.value = System.currentTimeMillis() + 120_000
                         wholeAppLocked.value = false
+                        idleLockController.unlock()
                         work.value = true
                     }
                     screen.value = Screen.HOME
@@ -353,25 +395,37 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
             snapshots.value = emptyMap()
             outcome.value = null
             outcomeActionId.value = null
+            idleLockController.clear()
             wholeAppLocked.value = false
             screen.value = Screen.SETUP
         }
 
+    fun onUserInteraction(): Boolean {
+        val wholeAppProtected =
+            state.value.settings.pinMode == PinMode.WHOLE_APP &&
+                state.value.settings.origin != null
+        if (!wholeAppProtected) return true
+        if (wholeAppLocked.value) return false
+
+        idleLockController.recordInteraction()
+        return !wholeAppLocked.value
+    }
+
     fun foregroundChanged(foreground: Boolean) {
         if (!foreground && state.value.settings.pinMode == PinMode.WHOLE_APP) {
-            authorizedUntil.value = 0
-            wholeAppLocked.value = true
+            idleLockController.lockNow()
         }
     }
 
     fun enforceWholeAppPin() {
-        if (state.value.settings.pinMode == PinMode.WHOLE_APP && state.value.settings.origin != null) wholeAppLocked.value = true
+        if (state.value.settings.pinMode == PinMode.WHOLE_APP && state.value.settings.origin != null) {
+            idleLockController.lockNow()
+        }
     }
 
     private data class PinUiState(
         val outcome: ActionOutcome?,
         val actionId: String?,
-        val authorizedUntil: Long,
         val unlocking: Boolean,
         val wholeAppLocked: Boolean,
     )

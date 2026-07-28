@@ -9,6 +9,8 @@ import android.webkit.WebView
 import android.webkit.WebViewClient
 import androidx.compose.foundation.Image
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.gestures.awaitEachGesture
+import androidx.compose.foundation.gestures.awaitFirstDown
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -47,6 +49,7 @@ import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
@@ -54,6 +57,8 @@ import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.input.pointer.PointerEventPass
+import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.text.input.ImeAction
 import androidx.compose.ui.text.input.KeyboardType
@@ -83,16 +88,14 @@ fun MainScreen(
     model: MainViewModel,
 ) {
     var confirm by remember { mutableStateOf<QuickAccessAction?>(null) }
-    val displayedScreen =
-        if (
-            state.settings.origin != null &&
+    val wholeAppGateVisible =
+        state.settings.origin != null &&
             state.settings.pinMode == PinMode.WHOLE_APP &&
             state.wholeAppLocked
-        ) {
-            Screen.PIN
-        } else {
-            state.screen
-        }
+    val displayedScreen = if (wholeAppGateVisible) Screen.PIN else state.screen
+    LaunchedEffect(wholeAppGateVisible) {
+        if (wholeAppGateVisible) confirm = null
+    }
     Scaffold { padding ->
         Box(Modifier.fillMaxSize().padding(padding)) {
             when (displayedScreen) {
@@ -120,15 +123,42 @@ fun MainScreen(
             if (displayedScreen != Screen.SETUP) state.message?.let { Text(it, Modifier.align(Alignment.BottomCenter).padding(12.dp), color = MaterialTheme.colorScheme.error) }
         }
     }
-    confirm?.let { action ->
-        AlertDialog(onDismissRequest = { confirm = null }, title = { Text("Confirm action") }, text = { Text("${action.label(state.snapshots[action.entityId])}?") }, confirmButton = {
-            TextButton(onClick = {
-                confirm = null
-                model.invoke(action)
-            }) { Text("Confirm") }
-        }, dismissButton = { TextButton(onClick = { confirm = null }) { Text("Cancel") } })
+    if (!wholeAppGateVisible) {
+        confirm?.let { action ->
+            AlertDialog(
+                onDismissRequest = {
+                    model.onUserInteraction()
+                    confirm = null
+                },
+                modifier = Modifier.observeUserInteraction(model::onUserInteraction),
+                title = { Text("Confirm action") },
+                text = { Text("${action.label(state.snapshots[action.entityId])}?") },
+                confirmButton = {
+                    TextButton(onClick = {
+                        if (model.onUserInteraction()) {
+                            confirm = null
+                            model.invoke(action)
+                        }
+                    }) { Text("Confirm") }
+                },
+                dismissButton = {
+                    TextButton(onClick = {
+                        model.onUserInteraction()
+                        confirm = null
+                    }) { Text("Cancel") }
+                },
+            )
+        }
     }
 }
+
+private fun Modifier.observeUserInteraction(onInteraction: () -> Boolean) =
+    pointerInput(onInteraction) {
+        awaitEachGesture {
+            awaitFirstDown(requireUnconsumed = false, pass = PointerEventPass.Initial)
+            onInteraction()
+        }
+    }
 
 @Composable private fun Home(
     state: UiState,
@@ -253,7 +283,17 @@ private fun HomeAssistantIcon(
             Text("Set up Home Assistant", style = MaterialTheme.typography.titleMedium)
             Text("Use an externally reachable HTTPS address trusted by Karoo.")
         }
-        item { OutlinedTextField(url, { url = it }, label = { Text("Home Assistant URL") }, singleLine = true) }
+        item {
+            OutlinedTextField(
+                url,
+                {
+                    url = it
+                    model.onUserInteraction()
+                },
+                label = { Text("Home Assistant URL") },
+                singleLine = true,
+            )
+        }
         item {
             if (state.settings.origin == null) {
                 Button(onClick = { error = model.beginAuthentication(url) }) { Text("Sign in with Home Assistant") }
@@ -288,7 +328,19 @@ private fun HomeAssistantIcon(
             }
         }
         if (selectedPinMode != PinMode.DISABLED) {
-            item { OutlinedTextField(pin, { pin = it.filter(Char::isDigit).take(6) }, label = { Text("4–6 digit PIN") }, singleLine = true, visualTransformation = PasswordVisualTransformation(), keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.NumberPassword)) }
+            item {
+                OutlinedTextField(
+                    pin,
+                    {
+                        pin = it.filter(Char::isDigit).take(6)
+                        model.onUserInteraction()
+                    },
+                    label = { Text("4–6 digit PIN") },
+                    singleLine = true,
+                    visualTransformation = PasswordVisualTransformation(),
+                    keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.NumberPassword),
+                )
+            }
             item {
                 Button(onClick = {
                     model.savePinMode(selectedPinMode, pin.ifBlank { null })
@@ -305,7 +357,19 @@ private fun HomeAssistantIcon(
         }
         if (selectedPinMode == PinMode.DISABLED && state.settings.pinMode != PinMode.DISABLED) {
             item { Text("Enter your current PIN to disable protection.") }
-            item { OutlinedTextField(currentPin, { currentPin = it.filter(Char::isDigit).take(6) }, label = { Text("Current PIN") }, singleLine = true, visualTransformation = PasswordVisualTransformation(), keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.NumberPassword)) }
+            item {
+                OutlinedTextField(
+                    currentPin,
+                    {
+                        currentPin = it.filter(Char::isDigit).take(6)
+                        model.onUserInteraction()
+                    },
+                    label = { Text("Current PIN") },
+                    singleLine = true,
+                    visualTransformation = PasswordVisualTransformation(),
+                    keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.NumberPassword),
+                )
+            }
             item {
                 Button(onClick = {
                     model.disablePinProtection(currentPin)
@@ -337,16 +401,27 @@ private fun HomeAssistantIcon(
     }
     if (showEraseConfirmation) {
         AlertDialog(
-            onDismissRequest = { showEraseConfirmation = false },
+            onDismissRequest = {
+                model.onUserInteraction()
+                showEraseConfirmation = false
+            },
+            modifier = Modifier.observeUserInteraction(model::onUserInteraction),
             title = { Text("Erase this account?") },
             text = { Text("This will remove the saved Home Assistant connection, Quick Access actions, and PIN. This cannot be undone.") },
             confirmButton = {
                 TextButton(onClick = {
-                    showEraseConfirmation = false
-                    model.signOutAndReset()
+                    if (model.onUserInteraction()) {
+                        showEraseConfirmation = false
+                        model.signOutAndReset()
+                    }
                 }) { Text("Erase") }
             },
-            dismissButton = { TextButton(onClick = { showEraseConfirmation = false }) { Text("Cancel") } },
+            dismissButton = {
+                TextButton(onClick = {
+                    model.onUserInteraction()
+                    showEraseConfirmation = false
+                }) { Text("Cancel") }
+            },
         )
     }
 }
@@ -438,7 +513,18 @@ private fun openOAuthCallback(
             Text("Select an entity to add a Quick Access action.")
             Button(onClick = model::discover, enabled = !state.busy) { Text(if (state.busy) "Loading…" else "Refresh entities") }
         }
-        item { OutlinedTextField(query, { query = it }, label = { Text("Search entities") }, singleLine = true, modifier = Modifier.fillMaxWidth()) }
+        item {
+            OutlinedTextField(
+                query,
+                {
+                    query = it
+                    model.onUserInteraction()
+                },
+                label = { Text("Search entities") },
+                singleLine = true,
+                modifier = Modifier.fillMaxWidth(),
+            )
+        }
         item {
             LazyRow(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                 item { FilterChip(selected = selectedDomain == null, onClick = { selectedDomain = null }, label = { Text("All") }) }
@@ -483,10 +569,19 @@ private fun openOAuthCallback(
         }
     }
     selected?.let { entity ->
-        ActionPicker(entity, protect, confirm, { protect = it }, { confirm = it }, { kind ->
-            model.add(entity, kind, protect, confirm)
-            selected = null
-        }, { selected = null })
+        ActionPicker(
+            entity = entity,
+            protect = protect,
+            confirmation = confirm,
+            setProtect = { protect = it },
+            setConfirmation = { confirm = it },
+            add = { kind ->
+                model.add(entity, kind, protect, confirm)
+                selected = null
+            },
+            dismiss = { selected = null },
+            onInteraction = model::onUserInteraction,
+        )
     }
 }
 
@@ -499,11 +594,16 @@ private fun ActionPicker(
     setConfirmation: (Boolean) -> Unit,
     add: (ActionKind) -> Unit,
     dismiss: () -> Unit,
+    onInteraction: () -> Boolean,
 ) {
     val kinds = entity.availableActionKinds()
     val singleKind = kinds.singleOrNull()
     AlertDialog(
-        onDismissRequest = dismiss,
+        onDismissRequest = {
+            onInteraction()
+            dismiss()
+        },
+        modifier = Modifier.observeUserInteraction(onInteraction),
         title = { Text(entity.friendlyName) },
         text = {
             Column {
@@ -516,19 +616,40 @@ private fun ActionPicker(
                 )
                 if (kinds.isNotEmpty()) {
                     Row(verticalAlignment = Alignment.CenterVertically) {
-                        Checkbox(protect, setProtect)
+                        Checkbox(protect, {
+                            if (onInteraction()) setProtect(it)
+                        })
                         Text("Require PIN")
                     }
                     Row(verticalAlignment = Alignment.CenterVertically) {
-                        Checkbox(confirmation, setConfirmation)
+                        Checkbox(confirmation, {
+                            if (onInteraction()) setConfirmation(it)
+                        })
                         Text("Confirm action")
                     }
                 }
-                if (singleKind == null) kinds.forEach { kind -> TextButton(onClick = { add(kind) }) { Text(kind.label()) } }
+                if (singleKind == null) {
+                    kinds.forEach { kind ->
+                        TextButton(onClick = {
+                            if (onInteraction()) add(kind)
+                        }) { Text(kind.label()) }
+                    }
+                }
             }
         },
-        confirmButton = { if (singleKind != null) TextButton(onClick = { add(singleKind) }) { Text("Add") } },
-        dismissButton = { TextButton(onClick = dismiss) { Text("Cancel") } },
+        confirmButton = {
+            if (singleKind != null) {
+                TextButton(onClick = {
+                    if (onInteraction()) add(singleKind)
+                }) { Text("Add") }
+            }
+        },
+        dismissButton = {
+            TextButton(onClick = {
+                onInteraction()
+                dismiss()
+            }) { Text("Cancel") }
+        },
     )
 }
 

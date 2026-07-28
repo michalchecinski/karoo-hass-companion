@@ -74,9 +74,11 @@ useful record of the intended scope but does not capture all later UX changes.
 - Whole-app PIN protection prevents entity-state traffic and Quick Access
   rendering until the PIN succeeds. Entity discovery starts immediately after
   a successful whole-app unlock; tiles show **Loading…** during that refresh.
-- A whole-app session remains unlocked while moving between in-app screens and
-  locks again when the app leaves the foreground or starts in a protected
-  configuration.
+- A whole-app session remains unlocked while moving between in-app screens.
+  Any touch, scroll, typing, or hardware-key interaction resets a two-minute
+  idle deadline. When that deadline expires, the current UI is immediately
+  replaced by PIN entry. The app also locks immediately when it leaves the
+  foreground or starts in a protected configuration.
 - **Forgot PIN / erase this account** is a full-width destructive button. It
   always presents a cancelable confirmation dialog before erasing data.
 
