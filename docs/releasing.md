@@ -17,26 +17,14 @@ Only squash merges are enabled so release automation can associate commits with 
 
 ## Signing identity
 
-The release key is stored outside the repository at:
-
-```text
-~/.android/keystores/karoo-hass-companion.jks
-```
-
-Its password is stored in macOS Keychain under the `karoo-hass-companion-release` service. GitHub Actions receives the same material through these encrypted repository secrets:
+GitHub Actions signs release builds using these encrypted repository secrets:
 
 - `KEYSTORE_BASE64`
 - `KEYSTORE_PASSWORD`
 - `KEY_ALIAS`
 - `KEY_PASSWORD`
 
-The key is the permanent Android application identity. Back up the encrypted JKS and its password separately before the first public release. Losing either prevents compatible application updates. Never commit, upload as a workflow artifact, or paste the key material into an issue or pull request.
-
-Certificate SHA-256 fingerprint:
-
-```text
-C1:EB:70:90:AE:A8:09:A8:1D:D3:C5:70:E3:24:BF:88:FD:4C:9C:6A:33:95:48:CF:E8:03:34:A6:DF:FB:AF:A2
-```
+The signing key is the permanent Android application identity. Keep an encrypted recovery copy of the key and its credentials in separate secure locations. Losing them prevents compatible application updates. Never commit, upload as a workflow artifact, or paste signing material into an issue or pull request.
 
 ## Publishing
 
@@ -54,10 +42,3 @@ C1:EB:70:90:AE:A8:09:A8:1D:D3:C5:70:E3:24:BF:88:FD:4C:9C:6A:33:95:48:CF:E8:03:34
 The workflow uses the GitHub run number as Android `versionCode`. It will not publish from a branch other than `main`, and a rerun updates the same draft instead of incrementing from an unpublished tag.
 
 Installed builds discover updates through the latest stable GitHub release manifest. Beta releases are available for manual testing but do not form a separate automatic-update channel; beta installations receive an update when a newer stable release is published.
-
-## Recovery and rollback
-
-- A failed or cancelled run may leave a draft release. Correct the problem and rerun the workflow; do not create a replacement tag manually.
-- Do not reuse a published version or version code.
-- Android releases cannot be rolled back over a newer installed version. Publish a new patch release with the correction.
-- Restore signing credentials only from the encrypted recovery copy and verify the certificate fingerprint above before publishing.
