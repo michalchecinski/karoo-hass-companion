@@ -71,6 +71,7 @@ import com.karoohass.core.ActionKind
 import com.karoohass.core.ActionOutcome
 import com.karoohass.core.ConnectionPolicy
 import com.karoohass.core.EntitySnapshot
+import com.karoohass.core.OnboardingStep
 import com.karoohass.core.PinMode
 import com.karoohass.core.QuickAccessAction
 import com.karoohass.core.availableActionKinds
@@ -102,6 +103,8 @@ fun MainScreen(
                     }
                 Screen.SETUP -> Setup(state, model)
                 Screen.AUTH -> OAuthWebView(model.currentAuthorizationUrl(), model::receiveOAuthCallback)
+                Screen.ONBOARDING_POLICY -> OnboardingPolicy(state, model)
+                Screen.ONBOARDING_PIN -> OnboardingPin(state, model)
                 Screen.MANAGE -> Manage(state, model)
                 Screen.PIN -> PinEntry(state, model)
             }
@@ -255,12 +258,16 @@ private fun HomeAssistantIcon(
         }
         item { OutlinedTextField(url, { url = it }, label = { Text("Home Assistant URL") }, singleLine = true) }
         item {
-            if (state.settings.origin == null) {
+            if (state.settings.origin == null || state.settings.onboardingStep == OnboardingStep.CONNECT) {
                 Button(onClick = { error = model.beginAuthentication(url) }) { Text("Sign in with Home Assistant") }
             } else {
                 Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
                     Text("Connected to ${state.settings.origin}", color = MaterialTheme.colorScheme.primary)
-                    Button(onClick = model::openEntityChooser) { Text("Manage Quick Access") }
+                    if (state.settings.onboardingStep == OnboardingStep.COMPLETE) {
+                        Button(onClick = model::openEntityChooser) { Text("Manage Quick Access") }
+                    } else {
+                        Button(onClick = model::continueOnboarding) { Text("Continue setup") }
+                    }
                 }
             }
         }
@@ -269,7 +276,10 @@ private fun HomeAssistantIcon(
             ConnectionPolicy.entries.forEach { policy ->
                 Row(Modifier.fillMaxWidth().clickable { model.savePolicy(policy) }, verticalAlignment = Alignment.CenterVertically) {
                     RadioButton(policy == state.settings.connectionPolicy, { model.savePolicy(policy) })
-                    Text(if (policy == ConnectionPolicy.WIFI_ONLY) "Wi-Fi only" else "Allow Companion fallback")
+                    Column {
+                        Text(policy.title())
+                        Text(policy.description(), style = MaterialTheme.typography.bodySmall)
+                    }
                 }
             }
         }
@@ -283,8 +293,19 @@ private fun HomeAssistantIcon(
                 }
                 Row(Modifier.fillMaxWidth().clickable(onClick = selectMode), verticalAlignment = Alignment.CenterVertically) {
                     RadioButton(mode == selectedPinMode, selectMode)
-                    Text(mode.name.replace('_', ' ').lowercase().replaceFirstChar(Char::uppercase))
+                    Column {
+                        Text(mode.title())
+                        Text(mode.description(), style = MaterialTheme.typography.bodySmall)
+                    }
                 }
+            }
+        }
+        if (selectedPinMode == PinMode.DISABLED) {
+            item {
+                Text(
+                    "Without PIN protection, anyone with access to this Karoo can use its Home Assistant controls.",
+                    color = MaterialTheme.colorScheme.error,
+                )
             }
         }
         if (selectedPinMode != PinMode.DISABLED) {
@@ -350,6 +371,151 @@ private fun HomeAssistantIcon(
         )
     }
 }
+
+@Composable
+private fun OnboardingPolicy(
+    state: UiState,
+    model: MainViewModel,
+) {
+    val returningToChoice = state.settings.onboardingStep == OnboardingStep.FIRST_ACTION
+    var selected by
+        rememberSaveable(state.settings.onboardingStep) {
+            mutableStateOf<ConnectionPolicy?>(if (returningToChoice) state.settings.connectionPolicy else null)
+        }
+    LazyColumn(
+        Modifier.fillMaxSize().padding(start = 16.dp, top = 16.dp, end = 16.dp, bottom = 72.dp),
+        verticalArrangement = Arrangement.spacedBy(12.dp),
+    ) {
+        item {
+            Text("Choose connection policy", style = MaterialTheme.typography.titleMedium)
+            Text("Choose how Quick Access may reach Home Assistant during normal use.")
+        }
+        items(ConnectionPolicy.entries) { policy ->
+            ElevatedCard(Modifier.fillMaxWidth().clickable { selected = policy }) {
+                Row(Modifier.fillMaxWidth().padding(12.dp), verticalAlignment = Alignment.Top) {
+                    RadioButton(selected == policy, { selected = policy })
+                    Column(Modifier.weight(1f)) {
+                        Text(policy.title())
+                        Text(policy.description(), style = MaterialTheme.typography.bodySmall)
+                    }
+                }
+            }
+        }
+        item {
+            Text(
+                "Companion fallback improves availability, but adds your paired phone and the Hammerhead Companion app to the connection path.",
+                color = MaterialTheme.colorScheme.error,
+            )
+        }
+        item {
+            Button(
+                onClick = { selected?.let(model::saveOnboardingPolicy) },
+                enabled = selected != null,
+                modifier = Modifier.fillMaxWidth(),
+            ) { Text("Continue") }
+        }
+    }
+}
+
+@Composable
+private fun OnboardingPin(
+    state: UiState,
+    model: MainViewModel,
+) {
+    val returningToChoice = state.settings.onboardingStep == OnboardingStep.FIRST_ACTION
+    val configuredPin = model.pinConfigured()
+    var selected by
+        rememberSaveable(state.settings.onboardingStep) {
+            mutableStateOf<PinMode?>(if (returningToChoice) state.settings.pinMode else null)
+        }
+    var pin by rememberSaveable { mutableStateOf("") }
+    val needsNewPin = selected != null && selected != PinMode.DISABLED && !configuredPin
+    LazyColumn(
+        Modifier.fillMaxSize().padding(start = 16.dp, top = 16.dp, end = 16.dp, bottom = 72.dp),
+        verticalArrangement = Arrangement.spacedBy(12.dp),
+    ) {
+        item {
+            Text("Choose PIN protection", style = MaterialTheme.typography.titleMedium)
+            Text("Choose the additional local protection applied on this Karoo.")
+        }
+        items(PinMode.entries) { mode ->
+            ElevatedCard(Modifier.fillMaxWidth().clickable { selected = mode }) {
+                Row(Modifier.fillMaxWidth().padding(12.dp), verticalAlignment = Alignment.Top) {
+                    RadioButton(selected == mode, { selected = mode })
+                    Column(Modifier.weight(1f)) {
+                        Text(mode.title())
+                        Text(mode.description(), style = MaterialTheme.typography.bodySmall)
+                    }
+                }
+            }
+        }
+        if (selected == PinMode.DISABLED) {
+            item {
+                Text(
+                    "Without PIN protection, anyone with access to this Karoo can use its Home Assistant controls.",
+                    color = MaterialTheme.colorScheme.error,
+                )
+            }
+        }
+        if (needsNewPin) {
+            item {
+                OutlinedTextField(
+                    pin,
+                    { pin = it.filter(Char::isDigit).take(6) },
+                    label = { Text("4–6 digit PIN") },
+                    singleLine = true,
+                    visualTransformation = PasswordVisualTransformation(),
+                    keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.NumberPassword),
+                    enabled = !state.unlocking,
+                    modifier = Modifier.fillMaxWidth(),
+                )
+            }
+        } else if (selected != null && selected != PinMode.DISABLED && configuredPin) {
+            item { Text("Your existing setup PIN will be kept.") }
+        }
+        item {
+            Button(
+                onClick = { selected?.let { model.saveOnboardingPinMode(it, pin.ifBlank { null }) } },
+                enabled = selected != null && (!needsNewPin || pin.length in 4..6) && !state.unlocking,
+                modifier = Modifier.fillMaxWidth(),
+            ) { Text("Continue to Quick Access") }
+        }
+        if (state.unlocking) {
+            item {
+                Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(12.dp)) {
+                    CircularProgressIndicator(Modifier.size(20.dp), strokeWidth = 2.dp)
+                    Text("Saving PIN protection…")
+                }
+            }
+        }
+    }
+}
+
+private fun ConnectionPolicy.title() =
+    when (this) {
+        ConnectionPolicy.WIFI_ONLY -> "Wi-Fi only"
+        ConnectionPolicy.ALLOW_COMPANION_FALLBACK -> "Allow Companion fallback"
+    }
+
+private fun ConnectionPolicy.description() =
+    when (this) {
+        ConnectionPolicy.WIFI_ONLY -> "Only connect directly through Karoo Wi-Fi."
+        ConnectionPolicy.ALLOW_COMPANION_FALLBACK -> "When Wi-Fi is unavailable, allow the paired phone and Companion app to provide the connection."
+    }
+
+private fun PinMode.title() =
+    when (this) {
+        PinMode.DISABLED -> "Disabled"
+        PinMode.WHOLE_APP -> "Whole app"
+        PinMode.SELECTED_ACTIONS -> "Selected actions"
+    }
+
+private fun PinMode.description() =
+    when (this) {
+        PinMode.DISABLED -> "Do not require additional local authorization."
+        PinMode.WHOLE_APP -> "Require the PIN before Quick Access can be used."
+        PinMode.SELECTED_ACTIONS -> "Require the PIN only for actions you mark as protected."
+    }
 
 @SuppressLint("SetJavaScriptEnabled")
 @Composable

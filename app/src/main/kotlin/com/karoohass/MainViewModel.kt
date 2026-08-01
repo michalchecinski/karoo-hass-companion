@@ -11,9 +11,11 @@ import com.karoohass.core.ActionOutcome
 import com.karoohass.core.AppSettings
 import com.karoohass.core.ConnectionPolicy
 import com.karoohass.core.EntitySnapshot
+import com.karoohass.core.OnboardingStep
 import com.karoohass.core.PinMode
 import com.karoohass.core.QuickAccessAction
 import com.karoohass.core.SettingsStore
+import com.karoohass.core.allowsActionManagement
 import com.karoohass.core.expectedState
 import com.karoohass.network.DirectWifiTransport
 import com.karoohass.network.HomeAssistantRepository
@@ -47,7 +49,7 @@ data class UiState(
     val wholeAppLocked: Boolean = false,
 )
 
-enum class Screen { HOME, SETUP, AUTH, MANAGE, PIN }
+enum class Screen { HOME, SETUP, AUTH, ONBOARDING_POLICY, ONBOARDING_PIN, MANAGE, PIN }
 
 class MainViewModel(application: Application) : AndroidViewModel(application) {
     private val settingsStore = SettingsStore(application)
@@ -85,10 +87,21 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
             val persisted = rawSettings.first()
             wholeAppLocked.value = persisted.pinMode == PinMode.WHOLE_APP && persisted.origin != null
             val oauthOrigin = oauth.configuredOrigin()
-            if (persisted.origin == null && oauthOrigin != null && runCatching { tokens.load() }.getOrNull() != null) {
+            val hasTokens = runCatching { tokens.load() }.getOrNull() != null
+            if (persisted.origin == null && oauthOrigin != null && hasTokens) {
                 settingsStore.update { current -> current.copy(origin = oauthOrigin) }
             }
-            if (persisted.pinMode != PinMode.WHOLE_APP && persisted.origin != null && persisted.actions.isNotEmpty() && runCatching { tokens.load() }.getOrNull() != null) {
+            val effectiveOrigin = persisted.origin ?: oauthOrigin
+            val effectiveStep =
+                if (persisted.onboardingStep == OnboardingStep.CONNECT && effectiveOrigin != null && hasTokens) {
+                    settingsStore.update { current -> current.copy(onboardingStep = OnboardingStep.CONNECTION_POLICY) }
+                    OnboardingStep.CONNECTION_POLICY
+                } else {
+                    persisted.onboardingStep
+                }
+            if (effectiveOrigin != null && hasTokens && effectiveStep != OnboardingStep.COMPLETE) {
+                openOnboardingStep(effectiveStep)
+            } else if (persisted.pinMode != PinMode.WHOLE_APP && persisted.origin != null && persisted.actions.isNotEmpty() && hasTokens) {
                 refreshEntities(silent = true)
             }
         }
@@ -100,9 +113,15 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
     }
 
     fun openEntityChooser() {
-        screen.value = Screen.MANAGE
-        discover()
+        if (state.value.settings.onboardingStep.allowsActionManagement()) {
+            screen.value = Screen.MANAGE
+            discover()
+        } else {
+            openOnboardingStep(state.value.settings.onboardingStep)
+        }
     }
+
+    fun continueOnboarding() = openOnboardingStep(state.value.settings.onboardingStep)
 
     fun home() {
         screen.value = Screen.HOME
@@ -113,7 +132,14 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
     fun back() {
         screen.value =
             when (screen.value) {
-                Screen.MANAGE, Screen.AUTH -> Screen.SETUP
+                Screen.MANAGE ->
+                    if (state.value.settings.onboardingStep == OnboardingStep.FIRST_ACTION) {
+                        Screen.ONBOARDING_PIN
+                    } else {
+                        Screen.SETUP
+                    }
+                Screen.ONBOARDING_PIN -> Screen.ONBOARDING_POLICY
+                Screen.ONBOARDING_POLICY, Screen.AUTH -> Screen.SETUP
                 Screen.SETUP -> Screen.HOME
                 else -> Screen.HOME
             }
@@ -154,7 +180,8 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
                     when (result) {
                         true -> {
                             message.value = null
-                            openEntityChooser()
+                            settingsStore.update { current -> current.copy(onboardingStep = OnboardingStep.CONNECTION_POLICY) }
+                            screen.value = Screen.ONBOARDING_POLICY
                         }
                         false -> message.value = "Sign-in could not be completed"
                         null -> Unit
@@ -168,6 +195,59 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
         }
 
     fun savePolicy(policy: ConnectionPolicy) = viewModelScope.launch { settingsStore.update { it.copy(connectionPolicy = policy) } }
+
+    fun saveOnboardingPolicy(policy: ConnectionPolicy) =
+        viewModelScope.launch {
+            settingsStore.update {
+                it.copy(
+                    connectionPolicy = policy,
+                    onboardingStep = OnboardingStep.PIN_MODE,
+                )
+            }
+            message.value = null
+            screen.value = Screen.ONBOARDING_PIN
+        }
+
+    fun saveOnboardingPinMode(
+        mode: PinMode,
+        pin: String? = null,
+    ) =
+        viewModelScope.launch {
+            if (unlocking.value) return@launch
+            unlocking.value = true
+            val alreadyConfigured = pinStore.configured()
+            val pinSet =
+                when {
+                    mode == PinMode.DISABLED -> {
+                        pinStore.clear()
+                        Result.success(Unit)
+                    }
+                    alreadyConfigured -> Result.success(Unit)
+                    pin == null -> Result.failure(IllegalArgumentException("Choose a 4–6 digit PIN"))
+                    else -> withContext(Dispatchers.Default) { runCatching { pinStore.set(pin) } }
+                }
+            if (pinSet.isSuccess) {
+                settingsStore.update {
+                    it.copy(
+                        pinMode = mode,
+                        onboardingStep = OnboardingStep.FIRST_ACTION,
+                    )
+                }
+                if (mode == PinMode.WHOLE_APP) {
+                    authorizedUntil.value = System.currentTimeMillis() + 120_000
+                    wholeAppLocked.value = false
+                } else {
+                    authorizedUntil.value = 0
+                    wholeAppLocked.value = false
+                }
+                message.value = null
+                screen.value = Screen.MANAGE
+                discover()
+            } else {
+                message.value = pinSet.exceptionOrNull()?.message ?: "PIN must contain 4–6 digits"
+            }
+            unlocking.value = false
+        }
 
     fun savePinMode(
         mode: PinMode,
@@ -230,7 +310,37 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
         kind: ActionKind,
         protected: Boolean,
         confirm: Boolean,
-    ) = viewModelScope.launch { settingsStore.update { old -> if (old.actions.any { it.entityId == entity.entityId && it.kind == kind }) old else old.copy(actions = old.actions + QuickAccessAction(UUID.randomUUID().toString(), entity.entityId, entity.domain, kind, protected, confirm || kind in setOf(ActionKind.UNLOCK, ActionKind.OPEN_COVER), entity.icon, (old.actions.maxOfOrNull { a -> a.order } ?: -1) + 1, entity.friendlyName)) } }
+    ) =
+        viewModelScope.launch {
+            var completedOnboarding = false
+            settingsStore.update { old ->
+                if (old.actions.any { it.entityId == entity.entityId && it.kind == kind }) {
+                    old
+                } else {
+                    val action =
+                        QuickAccessAction(
+                            UUID.randomUUID().toString(),
+                            entity.entityId,
+                            entity.domain,
+                            kind,
+                            protected,
+                            confirm || kind in setOf(ActionKind.UNLOCK, ActionKind.OPEN_COVER),
+                            entity.icon,
+                            (old.actions.maxOfOrNull { a -> a.order } ?: -1) + 1,
+                            entity.friendlyName,
+                        )
+                    completedOnboarding = old.onboardingStep == OnboardingStep.FIRST_ACTION
+                    old.copy(
+                        actions = old.actions + action,
+                        onboardingStep = if (completedOnboarding) OnboardingStep.COMPLETE else old.onboardingStep,
+                    )
+                }
+            }
+            if (completedOnboarding) {
+                message.value = null
+                screen.value = Screen.HOME
+            }
+        }
 
     fun remove(action: QuickAccessAction) = viewModelScope.launch { settingsStore.update { it.copy(actions = it.actions.filterNot { item -> item.id == action.id }) } }
 
@@ -278,7 +388,12 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
                         wholeAppLocked.value = false
                         work.value = true
                     }
-                    screen.value = Screen.HOME
+                    screen.value =
+                        if (state.value.settings.onboardingStep == OnboardingStep.FIRST_ACTION) {
+                            Screen.MANAGE
+                        } else {
+                            Screen.HOME
+                        }
                     pending.value = null
                     if (wholeAppProtected) refreshEntities(silent = true)
                     action?.let(::begin)
@@ -366,6 +481,20 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
 
     fun enforceWholeAppPin() {
         if (state.value.settings.pinMode == PinMode.WHOLE_APP && state.value.settings.origin != null) wholeAppLocked.value = true
+    }
+
+    fun pinConfigured() = pinStore.configured()
+
+    private fun openOnboardingStep(step: OnboardingStep) {
+        screen.value =
+            when (step) {
+                OnboardingStep.CONNECT -> Screen.SETUP
+                OnboardingStep.CONNECTION_POLICY -> Screen.ONBOARDING_POLICY
+                OnboardingStep.PIN_MODE -> Screen.ONBOARDING_PIN
+                OnboardingStep.FIRST_ACTION -> Screen.MANAGE
+                OnboardingStep.COMPLETE -> Screen.HOME
+            }
+        if (step == OnboardingStep.FIRST_ACTION) discover()
     }
 
     private data class PinUiState(
