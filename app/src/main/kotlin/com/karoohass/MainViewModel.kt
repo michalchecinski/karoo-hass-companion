@@ -132,12 +132,7 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
     fun back() {
         screen.value =
             when (screen.value) {
-                Screen.MANAGE ->
-                    if (state.value.settings.onboardingStep == OnboardingStep.FIRST_ACTION) {
-                        Screen.ONBOARDING_PIN
-                    } else {
-                        Screen.SETUP
-                    }
+                Screen.MANAGE -> Screen.SETUP
                 Screen.ONBOARDING_PIN -> Screen.ONBOARDING_POLICY
                 Screen.ONBOARDING_POLICY, Screen.AUTH -> Screen.SETUP
                 Screen.SETUP -> Screen.HOME
@@ -215,14 +210,12 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
         viewModelScope.launch {
             if (unlocking.value) return@launch
             unlocking.value = true
-            val alreadyConfigured = pinStore.configured()
             val pinSet =
                 when {
                     mode == PinMode.DISABLED -> {
                         pinStore.clear()
                         Result.success(Unit)
                     }
-                    alreadyConfigured -> Result.success(Unit)
                     pin == null -> Result.failure(IllegalArgumentException("Choose a 4–6 digit PIN"))
                     else -> withContext(Dispatchers.Default) { runCatching { pinStore.set(pin) } }
                 }
@@ -482,8 +475,6 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
     fun enforceWholeAppPin() {
         if (state.value.settings.pinMode == PinMode.WHOLE_APP && state.value.settings.origin != null) wholeAppLocked.value = true
     }
-
-    fun pinConfigured() = pinStore.configured()
 
     private fun openOnboardingStep(step: OnboardingStep) {
         screen.value =

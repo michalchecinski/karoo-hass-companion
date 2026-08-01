@@ -271,72 +271,74 @@ private fun HomeAssistantIcon(
                 }
             }
         }
-        item { Text("Connection policy") }
-        item {
-            ConnectionPolicy.entries.forEach { policy ->
-                Row(Modifier.fillMaxWidth().clickable { model.savePolicy(policy) }, verticalAlignment = Alignment.CenterVertically) {
-                    RadioButton(policy == state.settings.connectionPolicy, { model.savePolicy(policy) })
-                    Column {
-                        Text(policy.title())
-                        Text(policy.description(), style = MaterialTheme.typography.bodySmall)
+        if (state.settings.onboardingStep == OnboardingStep.COMPLETE) {
+            item { Text("Connection policy") }
+            item {
+                ConnectionPolicy.entries.forEach { policy ->
+                    Row(Modifier.fillMaxWidth().clickable { model.savePolicy(policy) }, verticalAlignment = Alignment.CenterVertically) {
+                        RadioButton(policy == state.settings.connectionPolicy, { model.savePolicy(policy) })
+                        Column {
+                            Text(policy.title())
+                            Text(policy.description(), style = MaterialTheme.typography.bodySmall)
+                        }
                     }
                 }
             }
-        }
-        item { Text("PIN protection") }
-        item {
-            PinMode.entries.forEach { mode ->
-                val selectMode = {
-                    selectedPinMode = mode
-                    confirmation = null
-                    error = null
-                }
-                Row(Modifier.fillMaxWidth().clickable(onClick = selectMode), verticalAlignment = Alignment.CenterVertically) {
-                    RadioButton(mode == selectedPinMode, selectMode)
-                    Column {
-                        Text(mode.title())
-                        Text(mode.description(), style = MaterialTheme.typography.bodySmall)
+            item { Text("PIN protection") }
+            item {
+                PinMode.entries.forEach { mode ->
+                    val selectMode = {
+                        selectedPinMode = mode
+                        confirmation = null
+                        error = null
+                    }
+                    Row(Modifier.fillMaxWidth().clickable(onClick = selectMode), verticalAlignment = Alignment.CenterVertically) {
+                        RadioButton(mode == selectedPinMode, selectMode)
+                        Column {
+                            Text(mode.title())
+                            Text(mode.description(), style = MaterialTheme.typography.bodySmall)
+                        }
                     }
                 }
             }
-        }
-        if (selectedPinMode == PinMode.DISABLED) {
-            item {
-                Text(
-                    "Without PIN protection, anyone with access to this Karoo can use its Home Assistant controls.",
-                    color = MaterialTheme.colorScheme.error,
-                )
-            }
-        }
-        if (selectedPinMode != PinMode.DISABLED) {
-            item { OutlinedTextField(pin, { pin = it.filter(Char::isDigit).take(6) }, label = { Text("4–6 digit PIN") }, singleLine = true, visualTransformation = PasswordVisualTransformation(), keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.NumberPassword)) }
-            item {
-                Button(onClick = {
-                    model.savePinMode(selectedPinMode, pin.ifBlank { null })
-                }, enabled = !state.unlocking) { Text("Save PIN protection") }
-            }
-            if (state.unlocking) {
+            if (selectedPinMode == PinMode.DISABLED) {
                 item {
-                    Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(12.dp)) {
-                        CircularProgressIndicator(Modifier.size(20.dp), strokeWidth = 2.dp)
-                        Text("Saving PIN protection…")
+                    Text(
+                        "Without PIN protection, anyone with access to this Karoo can use its Home Assistant controls.",
+                        color = MaterialTheme.colorScheme.error,
+                    )
+                }
+            }
+            if (selectedPinMode != PinMode.DISABLED) {
+                item { OutlinedTextField(pin, { pin = it.filter(Char::isDigit).take(6) }, label = { Text("4–6 digit PIN") }, singleLine = true, visualTransformation = PasswordVisualTransformation(), keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.NumberPassword)) }
+                item {
+                    Button(onClick = {
+                        model.savePinMode(selectedPinMode, pin.ifBlank { null })
+                    }, enabled = !state.unlocking) { Text("Save PIN protection") }
+                }
+                if (state.unlocking) {
+                    item {
+                        Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(12.dp)) {
+                            CircularProgressIndicator(Modifier.size(20.dp), strokeWidth = 2.dp)
+                            Text("Saving PIN protection…")
+                        }
                     }
                 }
             }
-        }
-        if (selectedPinMode == PinMode.DISABLED && state.settings.pinMode != PinMode.DISABLED) {
-            item { Text("Enter your current PIN to disable protection.") }
-            item { OutlinedTextField(currentPin, { currentPin = it.filter(Char::isDigit).take(6) }, label = { Text("Current PIN") }, singleLine = true, visualTransformation = PasswordVisualTransformation(), keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.NumberPassword)) }
-            item {
-                Button(onClick = {
-                    model.disablePinProtection(currentPin)
-                }, enabled = currentPin.length in 4..6 && !state.unlocking) { Text("Disable PIN protection") }
-            }
-            if (state.unlocking) {
+            if (selectedPinMode == PinMode.DISABLED && state.settings.pinMode != PinMode.DISABLED) {
+                item { Text("Enter your current PIN to disable protection.") }
+                item { OutlinedTextField(currentPin, { currentPin = it.filter(Char::isDigit).take(6) }, label = { Text("Current PIN") }, singleLine = true, visualTransformation = PasswordVisualTransformation(), keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.NumberPassword)) }
                 item {
-                    Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(12.dp)) {
-                        CircularProgressIndicator(Modifier.size(20.dp), strokeWidth = 2.dp)
-                        Text("Verifying PIN…")
+                    Button(onClick = {
+                        model.disablePinProtection(currentPin)
+                    }, enabled = currentPin.length in 4..6 && !state.unlocking) { Text("Disable PIN protection") }
+                }
+                if (state.unlocking) {
+                    item {
+                        Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(12.dp)) {
+                            CircularProgressIndicator(Modifier.size(20.dp), strokeWidth = 2.dp)
+                            Text("Verifying PIN…")
+                        }
                     }
                 }
             }
@@ -377,11 +379,7 @@ private fun OnboardingPolicy(
     state: UiState,
     model: MainViewModel,
 ) {
-    val returningToChoice = state.settings.onboardingStep == OnboardingStep.FIRST_ACTION
-    var selected by
-        rememberSaveable(state.settings.onboardingStep) {
-            mutableStateOf<ConnectionPolicy?>(if (returningToChoice) state.settings.connectionPolicy else null)
-        }
+    var selected by rememberSaveable { mutableStateOf<ConnectionPolicy?>(null) }
     LazyColumn(
         Modifier.fillMaxSize().padding(start = 16.dp, top = 16.dp, end = 16.dp, bottom = 72.dp),
         verticalArrangement = Arrangement.spacedBy(12.dp),
@@ -422,14 +420,9 @@ private fun OnboardingPin(
     state: UiState,
     model: MainViewModel,
 ) {
-    val returningToChoice = state.settings.onboardingStep == OnboardingStep.FIRST_ACTION
-    val configuredPin = model.pinConfigured()
-    var selected by
-        rememberSaveable(state.settings.onboardingStep) {
-            mutableStateOf<PinMode?>(if (returningToChoice) state.settings.pinMode else null)
-        }
+    var selected by rememberSaveable { mutableStateOf<PinMode?>(null) }
     var pin by rememberSaveable { mutableStateOf("") }
-    val needsNewPin = selected != null && selected != PinMode.DISABLED && !configuredPin
+    val needsNewPin = selected != null && selected != PinMode.DISABLED
     LazyColumn(
         Modifier.fillMaxSize().padding(start = 16.dp, top = 16.dp, end = 16.dp, bottom = 72.dp),
         verticalArrangement = Arrangement.spacedBy(12.dp),
@@ -470,8 +463,6 @@ private fun OnboardingPin(
                     modifier = Modifier.fillMaxWidth(),
                 )
             }
-        } else if (selected != null && selected != PinMode.DISABLED && configuredPin) {
-            item { Text("Your existing setup PIN will be kept.") }
         }
         item {
             Button(
