@@ -10,6 +10,7 @@ class EntityDiscoveryUiStateTest {
         val state =
             UiState(
                 snapshots = emptyMap(),
+                wifiAvailable = true,
                 entityDiscoveryStatus = EntityDiscoveryStatus.FAILED,
             )
 
@@ -20,6 +21,7 @@ class EntityDiscoveryUiStateTest {
         val state =
             UiState(
                 snapshots = emptyMap(),
+                wifiAvailable = true,
                 entityDiscoveryStatus = EntityDiscoveryStatus.SUCCEEDED,
             )
 
@@ -31,9 +33,34 @@ class EntityDiscoveryUiStateTest {
         val state =
             UiState(
                 snapshots = mapOf(entity.entityId to entity),
+                wifiAvailable = true,
                 entityDiscoveryStatus = EntityDiscoveryStatus.SUCCEEDED,
             )
 
         assertFalse(state.showNoSupportedEntities)
+    }
+
+    @Test fun `entity refresh is disabled and empty result hidden without Wi-Fi`() {
+        val state =
+            UiState(
+                snapshots = emptyMap(),
+                wifiAvailable = false,
+                entityDiscoveryStatus = EntityDiscoveryStatus.SUCCEEDED,
+            )
+
+        assertFalse(state.canDiscoverEntities)
+        assertFalse(state.showNoSupportedEntities)
+    }
+
+    @Test fun `entity refresh is enabled when Wi-Fi is available and app is idle`() {
+        val state = UiState(wifiAvailable = true)
+
+        assertTrue(state.canDiscoverEntities)
+    }
+
+    @Test fun `entity refresh is disabled while another request is active`() {
+        val state = UiState(wifiAvailable = true, busy = true)
+
+        assertFalse(state.canDiscoverEntities)
     }
 }
