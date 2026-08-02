@@ -38,6 +38,7 @@ data class UiState(
     val snapshots: Map<String, EntitySnapshot> = emptyMap(),
     val screen: Screen = Screen.HOME,
     val busy: Boolean = false,
+    val entityDiscoveryStatus: EntityDiscoveryStatus = EntityDiscoveryStatus.NOT_STARTED,
     val message: String? = null,
     val outcome: ActionOutcome? = null,
     val outcomeActionId: String? = null,
@@ -45,9 +46,14 @@ data class UiState(
     val authorizedUntil: Long = 0,
     val unlocking: Boolean = false,
     val wholeAppLocked: Boolean = false,
-)
+) {
+    val showNoSupportedEntities: Boolean
+        get() = !busy && snapshots.isEmpty() && entityDiscoveryStatus == EntityDiscoveryStatus.SUCCEEDED
+}
 
 enum class Screen { HOME, SETUP, AUTH, MANAGE, PIN }
+
+enum class EntityDiscoveryStatus { NOT_STARTED, LOADING, SUCCEEDED, FAILED }
 
 class MainViewModel(application: Application) : AndroidViewModel(application) {
     private val settingsStore = SettingsStore(application)
@@ -58,6 +64,7 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
     private val screen = MutableStateFlow(Screen.HOME)
     private val snapshots = MutableStateFlow<Map<String, EntitySnapshot>>(emptyMap())
     private val work = MutableStateFlow(false)
+    private val entityDiscoveryStatus = MutableStateFlow(EntityDiscoveryStatus.NOT_STARTED)
     private val message = MutableStateFlow<String?>(null)
     private val pending = MutableStateFlow<QuickAccessAction?>(null)
     private val outcome = MutableStateFlow<ActionOutcome?>(null)
@@ -69,15 +76,27 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
     private val directTransport = DirectWifiTransport(application)
     private val policyTransport = PolicyTransport({ state.value.settings.connectionPolicy }, directTransport, KarooTransport(application))
     private val repository = HomeAssistantRepository({ state.value.settings.origin }, policyTransport, tokens) { oauth.refresh(policyTransport) }
-    private val wifiRepository = HomeAssistantRepository({ state.value.settings.origin }, directTransport, tokens) { oauth.refresh(directTransport) }
     val state: StateFlow<UiState> =
         combine(
             combine(rawSettings, screen) { settings, current -> settings to current },
-            combine(snapshots, work) { loaded, isBusy -> loaded to isBusy },
+            combine(snapshots, work, entityDiscoveryStatus) { loaded, isBusy, discoveryStatus -> DiscoveryUiState(loaded, isBusy, discoveryStatus) },
             combine(message, pending) { notice, request -> notice to request },
             combine(outcome, outcomeActionId, authorizedUntil, unlocking, wholeAppLocked) { result, actionId, auth, isUnlocking, isWholeAppLocked -> PinUiState(result, actionId, auth, isUnlocking, isWholeAppLocked) },
         ) { settingsAndScreen, snapshotsAndWork, messageAndPending, outcomeAndAuth ->
-            UiState(settingsAndScreen.first, snapshotsAndWork.first, settingsAndScreen.second, snapshotsAndWork.second, messageAndPending.first, outcomeAndAuth.outcome, outcomeAndAuth.actionId, messageAndPending.second, outcomeAndAuth.authorizedUntil, outcomeAndAuth.unlocking, outcomeAndAuth.wholeAppLocked)
+            UiState(
+                settings = settingsAndScreen.first,
+                snapshots = snapshotsAndWork.snapshots,
+                screen = settingsAndScreen.second,
+                busy = snapshotsAndWork.busy,
+                entityDiscoveryStatus = snapshotsAndWork.status,
+                message = messageAndPending.first,
+                outcome = outcomeAndAuth.outcome,
+                outcomeActionId = outcomeAndAuth.actionId,
+                pending = messageAndPending.second,
+                authorizedUntil = outcomeAndAuth.authorizedUntil,
+                unlocking = outcomeAndAuth.unlocking,
+                wholeAppLocked = outcomeAndAuth.wholeAppLocked,
+            )
         }.stateIn(viewModelScope, SharingStarted.Eagerly, UiState())
 
     init {
@@ -217,12 +236,22 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
 
     private suspend fun refreshEntities(silent: Boolean) {
         work.value = true
-        runCatching { wifiRepository.discover() }.onSuccess { found ->
+        entityDiscoveryStatus.value = EntityDiscoveryStatus.LOADING
+        if (!silent) message.value = null
+        try {
+            val found = repository.discover()
             val byId = found.associateBy { it.entityId }
             snapshots.value = byId
             settingsStore.update { old -> old.copy(actions = old.actions.map { action -> byId[action.entityId]?.let { entity -> action.copy(displayName = entity.friendlyName, icon = entity.icon ?: action.icon) } ?: action }) }
-        }.onFailure { if (!silent) message.value = it.message ?: "Could not load entities over Wi-Fi" }
-        work.value = false
+            entityDiscoveryStatus.value = EntityDiscoveryStatus.SUCCEEDED
+        } catch (error: CancellationException) {
+            throw error
+        } catch (error: Exception) {
+            entityDiscoveryStatus.value = EntityDiscoveryStatus.FAILED
+            if (!silent) message.value = error.message ?: "Could not load entities"
+        } finally {
+            work.value = false
+        }
     }
 
     fun add(
@@ -351,6 +380,7 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
             pinStore.clear()
             settingsStore.update { AppSettings() }
             snapshots.value = emptyMap()
+            entityDiscoveryStatus.value = EntityDiscoveryStatus.NOT_STARTED
             outcome.value = null
             outcomeActionId.value = null
             wholeAppLocked.value = false
@@ -374,5 +404,11 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
         val authorizedUntil: Long,
         val unlocking: Boolean,
         val wholeAppLocked: Boolean,
+    )
+
+    private data class DiscoveryUiState(
+        val snapshots: Map<String, EntitySnapshot>,
+        val busy: Boolean,
+        val status: EntityDiscoveryStatus,
     )
 }

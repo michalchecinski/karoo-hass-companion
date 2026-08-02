@@ -447,7 +447,7 @@ private fun openOAuthCallback(
                 }
             }
         }
-        if (!state.busy && entities.isEmpty()) item { Text("No supported entities found.") }
+        if (state.showNoSupportedEntities) item { Text("No supported entities found.") }
         if (!state.busy && entities.isNotEmpty() && filteredEntities.isEmpty()) item { Text("No entities match these filters.") }
         items(filteredEntities, key = { it.entityId }) { entity ->
             ElevatedCard(Modifier.fillMaxWidth().clickable { selected = entity }) {

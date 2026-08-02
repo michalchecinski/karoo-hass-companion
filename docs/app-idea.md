@@ -137,6 +137,12 @@ situations, but it adds the paired phone and Companion app to the connection
 path. The app should explain this trade-off and must not enable fallback
 without the user's explicit choice.
 
+Quick Access entity discovery and refresh should follow the same connection
+policy selected by the user. If discovery cannot connect, the app should show
+the connection failure without also implying that Home Assistant contains no
+supported entities. An empty entity result should be shown only after a
+successful discovery request returns no supported entities.
+
 ### Honest
 
 Home Assistant accepting a request does not always prove that a physical

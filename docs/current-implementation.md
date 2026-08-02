@@ -16,7 +16,8 @@ useful record of the intended scope but does not capture all later UX changes.
   exchanged over direct Wi-Fi. Tokens are encrypted with Android Keystore
   AES-GCM storage.
 - The connection policy is configurable as **Wi-Fi only** or **Allow Companion
-  fallback**. Setup, entity discovery, and management use direct Wi-Fi.
+  fallback**. Entity discovery and management use the selected connection
+  policy, while initial OAuth setup still requires direct Wi-Fi.
 - Direct Wi-Fi responses allow Home Assistant's large state list (up to 2 MB).
   The Karoo Companion fallback remains bounded to 100 KB.
 - Signing out or using account reset attempts OAuth revocation, removes tokens,
@@ -51,9 +52,11 @@ useful record of the intended scope but does not capture all later UX changes.
 - The Settings gear in the upper-right opens general settings.
 - **Manage Quick Access** opens the entity chooser. The chooser does not
   replace the general settings screen.
-- The chooser fetches supported Home Assistant entities over Wi-Fi, supports
-  text search and domain filters, and uses custom rows rather than Material
-  `ListItem` to avoid a Karoo Compose measurement crash.
+- The chooser fetches supported Home Assistant entities using the selected
+  connection policy, supports text search and domain filters, and uses custom
+  rows rather than Material `ListItem` to avoid a Karoo Compose measurement
+  crash. A discovery failure is shown on its own and is not presented as a
+  successful empty result.
 - Selecting an entity opens an action picker. For lights and switches this has
   one Add action; scripts likewise use one Add action. Existing configured
   actions can be removed or reordered from the management screen.
@@ -108,7 +111,8 @@ useful record of the intended scope but does not capture all later UX changes.
 
 - The app intentionally remains a curated control surface, not a Home
   Assistant dashboard or arbitrary service-call client.
-- Entity management and discovery require direct Wi-Fi.
+- Companion entity discovery remains subject to the Karoo transport's 100 KB
+  response limit.
 - Home Assistant state is retrieved through REST refresh/polling; the app does
   not maintain a WebSocket subscription.
 - Bundled icons are a curated domain-oriented set, not the full Material
