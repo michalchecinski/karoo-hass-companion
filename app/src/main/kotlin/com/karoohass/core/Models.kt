@@ -118,17 +118,19 @@ fun EntitySnapshot.displayState(): String =
         else -> state
     }
 
-fun QuickAccessAction.actionHint(entity: EntitySnapshot?): String =
-    when {
+fun QuickAccessAction.actionHint(entity: EntitySnapshot?): String {
+    val resolved = resolve(entity)
+    return when {
         kind !in setOf(ActionKind.CONTROL_LOCK, ActionKind.CONTROL_COVER) -> ""
         entity == null -> "State unavailable"
         !entity.available -> "Action unavailable"
-        resolve(entity) != null -> "Tap to ${resolve(entity)!!.operationLabel.lowercase()}"
+        resolved != null -> "Tap to ${resolved.operationLabel.lowercase()}"
         kind == ActionKind.CONTROL_LOCK && entity.state in LOCK_TRANSITIONAL_STATES -> "Wait until movement finishes"
         kind == ActionKind.CONTROL_COVER && entity.state in COVER_TRANSITIONAL_STATES && entity.supportedFeatures and COVER_SUPPORT_STOP == 0 -> "Wait until movement finishes"
         kind == ActionKind.CONTROL_COVER && entity.state in setOf("open", "closed") -> "Action unsupported"
         else -> "Action unavailable"
     }
+}
 
 private fun QuickAccessAction.resolveLock(entity: EntitySnapshot?): ResolvedAction? {
     if (entity == null || entity.domain != "lock" || !entity.available) return null

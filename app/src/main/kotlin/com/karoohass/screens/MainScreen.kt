@@ -121,7 +121,7 @@ fun MainScreen(
             if (displayedScreen != Screen.SETUP) state.message?.let { Text(it, Modifier.align(Alignment.BottomCenter).padding(12.dp), color = MaterialTheme.colorScheme.error) }
         }
     }
-    state.confirmation?.let { resolved ->
+    state.confirmation?.takeIf { displayedScreen == Screen.HOME }?.let { resolved ->
         AlertDialog(
             onDismissRequest = model::dismissConfirmation,
             title = { Text("Confirm action") },

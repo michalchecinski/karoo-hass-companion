@@ -69,6 +69,7 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
     private val authorizedUntil = MutableStateFlow(0L)
     private val unlocking = MutableStateFlow(false)
     private val wholeAppLocked = MutableStateFlow(true)
+    private var actionIntentGeneration = 0L
     private var authorizationUrl: String? = null
     private val directTransport = DirectWifiTransport(application)
     private val policyTransport = PolicyTransport({ state.value.settings.connectionPolicy }, directTransport, KarooTransport(application))
@@ -258,15 +259,18 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
         }
 
     fun invoke(action: QuickAccessAction) {
-        prepare(action)
+        if (!work.compareAndSet(expect = false, update = true)) return
+        prepare(action, ++actionIntentGeneration)
     }
 
-    private fun prepare(action: QuickAccessAction) =
+    private fun prepare(
+        action: QuickAccessAction,
+        intentGeneration: Long,
+    ) =
         viewModelScope.launch {
             outcomeActionId.value = action.id
             outcome.value = null
             message.value = null
-            work.value = true
             var snapshot = snapshots.value[action.entityId]
             val mustRefresh = action.kind in setOf(ActionKind.CONTROL_LOCK, ActionKind.CONTROL_COVER)
             val refreshIfStale = action.kind == ActionKind.TOGGLE && (snapshot == null || System.currentTimeMillis() - snapshot.fetchedAt > 60_000)
@@ -280,6 +284,10 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
                     message.value = "Action unavailable: state could not be refreshed"
                     return@launch
                 }
+            }
+            if (intentGeneration != actionIntentGeneration) {
+                work.value = false
+                return@launch
             }
             val resolved = action.resolve(snapshot)
             work.value = false
@@ -341,13 +349,13 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
             }
         }
 
-    private fun begin(resolved: ResolvedAction) =
+    private fun begin(resolved: ResolvedAction) {
+        if (!work.compareAndSet(expect = false, update = true)) return
         viewModelScope.launch {
             val action = resolved.action
             outcomeActionId.value = action.id
             outcome.value = null
             message.value = null
-            work.value = true
             try {
                 outcome.value = ActionOutcome.SENDING
                 val requested = repository.execute(resolved)
@@ -389,6 +397,7 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
                 outcomeActionId.value = null
             }
         }
+    }
 
     fun signOutAndReset() =
         viewModelScope.launch {
@@ -404,6 +413,14 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
         }
 
     fun foregroundChanged(foreground: Boolean) {
+        if (!foreground) {
+            actionIntentGeneration++
+            confirmation.value = null
+            if (pending.value != null) {
+                pending.value = null
+                if (screen.value == Screen.PIN) screen.value = Screen.HOME
+            }
+        }
         if (!foreground && state.value.settings.pinMode == PinMode.WHOLE_APP) {
             authorizedUntil.value = 0
             wholeAppLocked.value = true

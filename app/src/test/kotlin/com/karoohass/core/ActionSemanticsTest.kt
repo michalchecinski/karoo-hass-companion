@@ -72,6 +72,13 @@ class ActionSemanticsTest {
         }
     }
 
+    @Test fun `configured confirmation protects close and stop`() {
+        val control = action(ActionKind.CONTROL_COVER, "cover.garage", confirm = true)
+
+        assertTrue(control.resolve(snapshot("cover.garage", "open", features = COVER_CLOSE))!!.requiresConfirmation)
+        assertTrue(control.resolve(snapshot("cover.garage", "opening", features = COVER_STOP))!!.requiresConfirmation)
+    }
+
     @Test fun `cover does not resolve an operation without its feature`() {
         val control = action(ActionKind.CONTROL_COVER, "cover.garage")
 
@@ -97,6 +104,12 @@ class ActionSemanticsTest {
 
     @Test fun `unexpected state uses readable fallback`() {
         assertEquals("Partially open", snapshot("cover.garage", "partially_open", features = COVER_OPEN).displayState())
+    }
+
+    @Test fun `state-aware management labels contain only the entity name`() {
+        val entity = snapshot("lock.front_door", "locked")
+
+        assertEquals("Test entity", action(ActionKind.CONTROL_LOCK, entity.entityId).label(entity))
     }
 
     @Test fun `script and toggle retain existing services`() {
