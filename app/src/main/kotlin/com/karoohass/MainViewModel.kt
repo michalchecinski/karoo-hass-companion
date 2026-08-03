@@ -20,8 +20,8 @@ import com.karoohass.core.PinMode
 import com.karoohass.core.QuickAccessAction
 import com.karoohass.core.ResolvedAction
 import com.karoohass.core.SettingsStore
-import com.karoohass.core.allowsActionManagement
 import com.karoohass.core.actionHint
+import com.karoohass.core.allowsActionManagement
 import com.karoohass.core.resolve
 import com.karoohass.network.DirectWifiTransport
 import com.karoohass.network.HomeAssistantRepository
