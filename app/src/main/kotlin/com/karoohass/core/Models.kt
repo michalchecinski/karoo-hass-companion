@@ -4,6 +4,14 @@ enum class ConnectionPolicy { WIFI_ONLY, ALLOW_COMPANION_FALLBACK }
 
 enum class PinMode { DISABLED, WHOLE_APP, SELECTED_ACTIONS }
 
+enum class OnboardingStep {
+    CONNECT,
+    CONNECTION_POLICY,
+    PIN_MODE,
+    FIRST_ACTION,
+    COMPLETE,
+}
+
 enum class ActionKind { RUN_SCRIPT, CONTROL_LOCK, CONTROL_COVER, TOGGLE }
 
 enum class ActionOutcome { SENDING, REQUESTED, COMPLETED, FAILED, UNKNOWN }
@@ -54,7 +62,10 @@ data class AppSettings(
     val connectionPolicy: ConnectionPolicy = ConnectionPolicy.WIFI_ONLY,
     val pinMode: PinMode = PinMode.DISABLED,
     val actions: List<QuickAccessAction> = emptyList(),
+    val onboardingStep: OnboardingStep = OnboardingStep.CONNECT,
 )
+
+fun OnboardingStep.allowsActionManagement() = this == OnboardingStep.FIRST_ACTION || this == OnboardingStep.COMPLETE
 
 fun EntitySnapshot.availableActionKinds(): List<ActionKind> =
     when (domain) {

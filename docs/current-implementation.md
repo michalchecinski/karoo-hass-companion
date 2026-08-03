@@ -15,9 +15,17 @@ useful record of the intended scope but does not capture all later UX changes.
 - The callback is intercepted by the app and the authorization code is
   exchanged over direct Wi-Fi. Tokens are encrypted with Android Keystore
   AES-GCM storage.
+- Fresh installations continue from OAuth through guided connection-policy and
+  PIN-mode choices. Neither choice is preselected, and both must be saved
+  before the entity chooser becomes available. Setup finishes after the first
+  Quick Access action is added and resumes at the saved step if interrupted.
+- Existing installations created before guided onboarding are treated as
+  complete. Erasing the account starts the fresh guided flow again.
 - The connection policy is configurable as **Wi-Fi only** or **Allow Companion
-  fallback**. Initial OAuth setup, entity discovery, and management use direct
-  Wi-Fi; normal Quick Access state and action requests use the selected policy.
+  fallback**. The choice explains that fallback adds the paired phone and
+  Hammerhead Companion app to the connection path. Initial OAuth setup, entity
+  discovery, and management use direct Wi-Fi; normal Quick Access state and
+  action requests use the selected policy.
 - Direct Wi-Fi responses allow Home Assistant's large state list (up to 2 MB).
   The Karoo Companion fallback remains bounded to 100 KB.
 - Signing out or using account reset attempts OAuth revocation, removes tokens,
@@ -74,6 +82,8 @@ useful record of the intended scope but does not capture all later UX changes.
 ## PIN protection
 
 - Available modes are **Disabled**, **Whole app**, and **Selected actions**.
+- Onboarding and Settings explain that disabling PIN protection leaves Home
+  Assistant controls without additional local authorization on the Karoo.
 - New PINs are 4–6 digits, use a masked field and numeric password keyboard,
   and are stored only as salted PBKDF2 verifiers. PIN verification includes
   persistent lockouts after repeated incorrect attempts.

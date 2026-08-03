@@ -36,6 +36,14 @@ class SettingsStore(private val context: Context) {
                             QuickAccessAction(item.getString("id"), item.getString("entityId"), item.getString("domain"), ActionKind.valueOf(item.getString("kind")), item.optBoolean("protected"), item.optBoolean("confirm"), item.optString("icon").takeIf { it.isNotBlank() }, item.optLong("order"), item.optString("displayName").takeIf { it.isNotBlank() })
                         }
                     }.sortedBy { it.order },
+                onboardingStep =
+                    if (root.has("onboardingStep")) {
+                        OnboardingStep.valueOf(root.getString("onboardingStep"))
+                    } else {
+                        // Settings written by versions without guided onboarding belong to an
+                        // existing installation and must not trigger the fresh-install wizard.
+                        OnboardingStep.COMPLETE
+                    },
             )
         }.getOrDefault(AppSettings())
 
@@ -44,6 +52,7 @@ class SettingsStore(private val context: Context) {
             put("origin", settings.origin)
             put("policy", settings.connectionPolicy.name)
             put("pinMode", settings.pinMode.name)
+            put("onboardingStep", settings.onboardingStep.name)
             put(
                 "actions",
                 JSONArray().apply {
