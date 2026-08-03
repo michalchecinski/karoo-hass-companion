@@ -1,62 +1,156 @@
 package com.karoohass.core
 
 import org.junit.Assert.assertEquals
+import org.junit.Assert.assertFalse
 import org.junit.Assert.assertNull
+import org.junit.Assert.assertTrue
 import org.junit.Test
 
 class ActionSemanticsTest {
-    @Test fun `action mapping only exposes supported Home Assistant services`() {
-        assertEquals("turn_on", ActionKind.RUN_SCRIPT.serviceName())
-        assertEquals("lock", ActionKind.LOCK.serviceName())
-        assertEquals("unlock", ActionKind.UNLOCK.serviceName())
-        assertEquals("open_cover", ActionKind.OPEN_COVER.serviceName())
-        assertEquals("close_cover", ActionKind.CLOSE_COVER.serviceName())
-        assertEquals("stop_cover", ActionKind.STOP_COVER.serviceName())
-        assertEquals("toggle", ActionKind.TOGGLE.serviceName())
-        assertEquals("turn_on", ActionKind.TURN_ON.serviceName())
-        assertEquals("turn_off", ActionKind.TURN_OFF.serviceName())
+    @Test fun `lock entity exposes one state-aware control`() {
+        assertEquals(listOf(ActionKind.CONTROL_LOCK), snapshot("lock.front_door", "locked").availableActionKinds())
     }
 
-    @Test fun `only stateful actions have a provable expected final state`() {
-        assertEquals("locked", ActionKind.LOCK.expectedState())
-        assertEquals("unlocked", ActionKind.UNLOCK.expectedState())
-        assertEquals("open", ActionKind.OPEN_COVER.expectedState())
-        assertEquals("closed", ActionKind.CLOSE_COVER.expectedState())
-        assertEquals("on", ActionKind.TURN_ON.expectedState())
-        assertEquals("off", ActionKind.TURN_OFF.expectedState())
-        assertNull(ActionKind.RUN_SCRIPT.expectedState())
-        assertNull(ActionKind.STOP_COVER.expectedState())
-        assertNull(ActionKind.TOGGLE.expectedState())
+    @Test fun `locked resolves to confirmed unlock`() {
+        val resolved = action(ActionKind.CONTROL_LOCK, "lock.front_door").resolve(snapshot("lock.front_door", "locked"))!!
+
+        assertEquals("unlock", resolved.serviceName)
+        assertEquals("Unlock", resolved.operationLabel)
+        assertEquals("unlocked", resolved.expectedState)
+        assertTrue(resolved.requiresConfirmation)
     }
 
-    @Test fun `cover actions follow Home Assistant supported feature flags`() {
-        val cover =
-            EntitySnapshot(
-                entityId = "cover.garage",
-                domain = "cover",
-                state = "closed",
-                supportedFeatures = 1 or 8,
-                available = true,
-                friendlyName = "Garage",
-            )
+    @Test fun `unlocked and open locks resolve to lock`() {
+        listOf("unlocked", "open").forEach { state ->
+            val resolved = action(ActionKind.CONTROL_LOCK, "lock.front_door").resolve(snapshot("lock.front_door", state))!!
+            assertEquals("lock", resolved.serviceName)
+            assertEquals("locked", resolved.expectedState)
+            assertFalse(resolved.requiresConfirmation)
+        }
+    }
 
+    @Test fun `configured confirmation also protects lock`() {
+        val resolved = action(ActionKind.CONTROL_LOCK, "lock.front_door", confirm = true).resolve(snapshot("lock.front_door", "unlocked"))!!
+
+        assertTrue(resolved.requiresConfirmation)
+    }
+
+    @Test fun `transitional jammed and unavailable locks do not resolve`() {
+        listOf("locking", "unlocking", "opening", "jammed", "unknown", "unavailable").forEach { state ->
+            assertNull(action(ActionKind.CONTROL_LOCK, "lock.front_door").resolve(snapshot("lock.front_door", state)))
+        }
+    }
+
+    @Test fun `cover exposes one control when it has a directional feature`() {
         assertEquals(
-            listOf(ActionKind.OPEN_COVER, ActionKind.STOP_COVER),
-            cover.availableActionKinds(),
+            listOf(ActionKind.CONTROL_COVER),
+            snapshot("cover.garage", "closed", features = COVER_OPEN or COVER_STOP).availableActionKinds(),
         )
+        assertEquals(emptyList<ActionKind>(), snapshot("cover.read_only", "closed").availableActionKinds())
     }
 
-    @Test fun `cover without supported operations exposes no actions`() {
-        val cover =
-            EntitySnapshot(
-                entityId = "cover.read_only",
-                domain = "cover",
-                state = "closed",
-                supportedFeatures = 0,
-                available = true,
-                friendlyName = "Read only cover",
-            )
+    @Test fun `closed and open covers resolve using supported features`() {
+        val control = action(ActionKind.CONTROL_COVER, "cover.garage")
+        val open = control.resolve(snapshot("cover.garage", "closed", features = COVER_OPEN or COVER_CLOSE))!!
+        val close = control.resolve(snapshot("cover.garage", "open", features = COVER_OPEN or COVER_CLOSE))!!
 
-        assertEquals(emptyList<ActionKind>(), cover.availableActionKinds())
+        assertEquals("open_cover", open.serviceName)
+        assertEquals("open", open.expectedState)
+        assertTrue(open.requiresConfirmation)
+        assertEquals("close_cover", close.serviceName)
+        assertEquals("closed", close.expectedState)
+        assertFalse(close.requiresConfirmation)
+    }
+
+    @Test fun `moving cover resolves to request-only stop when supported`() {
+        listOf("opening", "closing").forEach { state ->
+            val resolved = action(ActionKind.CONTROL_COVER, "cover.garage").resolve(snapshot("cover.garage", state, features = COVER_STOP))!!
+            assertEquals("stop_cover", resolved.serviceName)
+            assertNull(resolved.expectedState)
+            assertTrue(resolved.refreshAfterRequest)
+            assertFalse(resolved.requiresConfirmation)
+        }
+    }
+
+    @Test fun `configured confirmation protects close and stop`() {
+        val control = action(ActionKind.CONTROL_COVER, "cover.garage", confirm = true)
+
+        assertTrue(control.resolve(snapshot("cover.garage", "open", features = COVER_CLOSE))!!.requiresConfirmation)
+        assertTrue(control.resolve(snapshot("cover.garage", "opening", features = COVER_STOP))!!.requiresConfirmation)
+    }
+
+    @Test fun `cover does not resolve an operation without its feature`() {
+        val control = action(ActionKind.CONTROL_COVER, "cover.garage")
+
+        assertNull(control.resolve(snapshot("cover.garage", "closed", features = COVER_CLOSE)))
+        assertNull(control.resolve(snapshot("cover.garage", "open", features = COVER_OPEN)))
+        assertNull(control.resolve(snapshot("cover.garage", "opening", features = COVER_OPEN or COVER_CLOSE)))
+    }
+
+    @Test fun `state labels and action hints are readable`() {
+        val lock = action(ActionKind.CONTROL_LOCK, "lock.front_door")
+        val cover = action(ActionKind.CONTROL_COVER, "cover.garage")
+
+        assertEquals("Unlocking…", snapshot("lock.front_door", "unlocking").displayState())
+        assertEquals("Tap to unlock", lock.actionHint(snapshot("lock.front_door", "locked")))
+        assertEquals("Wait until movement finishes", lock.actionHint(snapshot("lock.front_door", "locking")))
+        assertEquals("Jammed", snapshot("lock.front_door", "jammed").displayState())
+        assertEquals("Action unavailable", lock.actionHint(snapshot("lock.front_door", "jammed")))
+        assertEquals("Closing…", snapshot("cover.garage", "closing", features = COVER_STOP).displayState())
+        assertEquals("Tap to stop", cover.actionHint(snapshot("cover.garage", "closing", features = COVER_STOP)))
+        assertEquals("Wait until movement finishes", cover.actionHint(snapshot("cover.garage", "closing", features = COVER_OPEN or COVER_CLOSE)))
+        assertEquals("Action unsupported", cover.actionHint(snapshot("cover.garage", "closed", features = COVER_CLOSE)))
+    }
+
+    @Test fun `unexpected state uses readable fallback`() {
+        assertEquals("Partially open", snapshot("cover.garage", "partially_open", features = COVER_OPEN).displayState())
+    }
+
+    @Test fun `state-aware management labels contain only the entity name`() {
+        val entity = snapshot("lock.front_door", "locked")
+
+        assertEquals("Test entity", action(ActionKind.CONTROL_LOCK, entity.entityId).label(entity))
+    }
+
+    @Test fun `script and toggle retain existing services`() {
+        val script = action(ActionKind.RUN_SCRIPT, "script.arrive_home").resolve(null)!!
+        val toggle = action(ActionKind.TOGGLE, "light.porch").resolve(snapshot("light.porch", "off"))!!
+
+        assertEquals("turn_on", script.serviceName)
+        assertEquals("toggle", toggle.serviceName)
+        assertTrue(toggle.completesOnStateChange)
+        assertEquals("off", toggle.startingState)
+    }
+
+    private fun action(
+        kind: ActionKind,
+        entityId: String,
+        confirm: Boolean = false,
+    ) = QuickAccessAction(
+        id = "action-id",
+        entityId = entityId,
+        domain = entityId.substringBefore('.'),
+        kind = kind,
+        requiresConfirmation = confirm,
+        displayName = "Test entity",
+    )
+
+    private fun snapshot(
+        entityId: String,
+        state: String,
+        features: Int = 0,
+    ) = EntitySnapshot(
+        entityId = entityId,
+        domain = entityId.substringBefore('.'),
+        state = state,
+        supportedFeatures = features,
+        available = state !in setOf("unknown", "unavailable"),
+        friendlyName = "Test entity",
+    )
+
+    private companion object {
+        const val COVER_OPEN = 1
+        const val COVER_CLOSE = 2
+        const val COVER_STOP = 8
     }
 }

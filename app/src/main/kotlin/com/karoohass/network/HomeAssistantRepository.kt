@@ -2,9 +2,7 @@ package com.karoohass.network
 
 import com.karoohass.core.ActionOutcome
 import com.karoohass.core.EntitySnapshot
-import com.karoohass.core.QuickAccessAction
-import com.karoohass.core.expectedState
-import com.karoohass.core.serviceName
+import com.karoohass.core.ResolvedAction
 import com.karoohass.security.TokenStore
 import org.json.JSONArray
 import org.json.JSONObject
@@ -15,19 +13,29 @@ class HomeAssistantRepository(
     private val tokens: TokenStore,
     private val refresh: suspend () -> Boolean,
 ) {
-    suspend fun discover(): List<EntitySnapshot> = request("GET", "/api/states").body?.let { parseStates(JSONArray(String(it))) } ?: emptyList()
+    suspend fun discover(): List<EntitySnapshot> {
+        val response = request("GET", "/api/states")
+        response.error?.let { throw TransportException.Failure(it) }
+        if (response.code !in 200..299) throw TransportException.Failure("Home Assistant returned HTTP ${response.code}")
+        val body = response.body ?: throw TransportException.Failure("Home Assistant returned an empty response")
+        return parseStates(JSONArray(String(body)))
+    }
 
     suspend fun refresh(entityId: String): EntitySnapshot? = runCatching { request("GET", "/api/states/$entityId").body?.let { parseState(JSONObject(String(it))) } }.getOrNull()
 
-    suspend fun execute(action: QuickAccessAction): ActionOutcome {
+    suspend fun execute(action: ResolvedAction): ActionOutcome {
         val response =
             try {
-                request("POST", "/api/services/${action.domain}/${action.kind.serviceName()}", JSONObject().put("entity_id", action.entityId).toString().toByteArray())
+                request(
+                    "POST",
+                    "/api/services/${action.action.domain}/${action.serviceName}",
+                    JSONObject().put("entity_id", action.action.entityId).toString().toByteArray(),
+                )
             } catch (_: TransportException) {
                 return ActionOutcome.UNKNOWN
             }
         return if (response.code in 200..299) {
-            if (action.kind.expectedState() == null) {
+            if (action.expectedState == null) {
                 ActionOutcome.REQUESTED
             } else {
                 ActionOutcome.SENDING
@@ -37,9 +45,9 @@ class HomeAssistantRepository(
         }
     }
 
-    suspend fun verify(action: QuickAccessAction): ActionOutcome {
-        val expected = action.kind.expectedState() ?: return ActionOutcome.REQUESTED
-        return if (awaitState(action.entityId) { it.state == expected } != null) ActionOutcome.COMPLETED else ActionOutcome.UNKNOWN
+    suspend fun verify(action: ResolvedAction): ActionOutcome {
+        val expected = action.expectedState ?: return ActionOutcome.REQUESTED
+        return if (awaitState(action.action.entityId) { it.state == expected } != null) ActionOutcome.COMPLETED else ActionOutcome.UNKNOWN
     }
 
     suspend fun awaitState(

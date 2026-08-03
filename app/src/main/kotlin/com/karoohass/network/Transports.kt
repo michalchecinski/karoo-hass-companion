@@ -30,13 +30,16 @@ interface HttpTransport {
     suspend fun execute(request: HttpRequest): HttpResponse
 }
 
-class DirectWifiTransport(private val context: Context) : HttpTransport {
+class DirectWifiTransport(context: Context) : HttpTransport {
+    private val manager = context.getSystemService(ConnectivityManager::class.java)
+
+    fun isAvailable(): Boolean = activeWifiNetwork() != null
+
     override suspend fun execute(request: HttpRequest): HttpResponse =
         try {
             withTimeout(30_000) {
                 kotlinx.coroutines.withContext(kotlinx.coroutines.Dispatchers.IO) {
-                    val manager = context.getSystemService(ConnectivityManager::class.java)
-                    val network = manager.activeNetwork?.takeIf { manager.getNetworkCapabilities(it)?.hasTransport(NetworkCapabilities.TRANSPORT_WIFI) == true } ?: throw TransportException.WifiUnavailable
+                    val network = activeWifiNetwork() ?: throw TransportException.WifiUnavailable
                     val connection = network.openConnection(URL(request.url)) as HttpURLConnection
                     try {
                         connection.requestMethod = request.method
@@ -62,6 +65,8 @@ class DirectWifiTransport(private val context: Context) : HttpTransport {
         } catch (_: TimeoutCancellationException) {
             throw TransportException.Failure("Direct Wi-Fi request timed out")
         }
+
+    private fun activeWifiNetwork() = manager.activeNetwork?.takeIf { manager.getNetworkCapabilities(it)?.hasTransport(NetworkCapabilities.TRANSPORT_WIFI) == true }
 
     private fun BufferedInputStream.readAtMost(limit: Int): ByteArray {
         val output = ByteArrayOutputStream()

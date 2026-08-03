@@ -23,8 +23,9 @@ useful record of the intended scope but does not capture all later UX changes.
   complete. Erasing the account starts the fresh guided flow again.
 - The connection policy is configurable as **Wi-Fi only** or **Allow Companion
   fallback**. The choice explains that fallback adds the paired phone and
-  Hammerhead Companion app to the connection path. Setup, entity discovery,
-  and management use direct Wi-Fi.
+  Hammerhead Companion app to the connection path. Initial OAuth setup, entity
+  discovery, and management use direct Wi-Fi; normal Quick Access state and
+  action requests use the selected policy.
 - Direct Wi-Fi responses allow Home Assistant's large state list (up to 2 MB).
   The Karoo Companion fallback remains bounded to 100 KB.
 - Signing out or using account reset attempts OAuth revocation, removes tokens,
@@ -43,14 +44,22 @@ useful record of the intended scope but does not capture all later UX changes.
   “Run script” label.
 - Lights and switches are represented as one **Toggle** action rather than
   separate turn-on and turn-off actions.
-- Locks support Lock and Unlock. Covers support Open, Close, and Stop. Scripts
-  support Run. Unlock and Open are always confirmation-protected; other
-  actions can optionally request confirmation.
+- Locks and covers are added as one state-aware control per entity rather than
+  as separate operations. A locked lock offers Unlock; an unlocked or open
+  lock offers Lock. A closed cover offers Open, an open cover offers Close,
+  and a moving cover offers Stop when the entity supports it. Scripts support
+  Run. Unlock and Open are always confirmation-protected; other resolved
+  operations can optionally request confirmation.
+- Lock and cover tiles show a readable current state plus the operation a tap
+  will request. Transitional or jammed locks, unsupported cover directions,
+  and unavailable entities explain why no action can currently be sent.
 - Tiles can be PIN-protected in selected-actions PIN mode. Tiles are disabled
   while an entity refresh or action request is in progress.
-- Stateful actions refresh stale state before execution, then poll Home
-  Assistant after execution to update the visible state. Toggle actions wait
-  for a changed state. Scripts deliberately do not display state.
+- Lock and cover controls refresh their state immediately before resolving an
+  operation, then poll Home Assistant after execution to update the visible
+  state. Cover Stop performs a best-effort state refresh without claiming
+  physical completion. Toggle actions wait for a changed state. Scripts
+  deliberately do not display state.
 - Configured actions store the Home Assistant friendly name and icon and are
   refreshed when discovery finds a newer entity definition.
 
@@ -59,12 +68,16 @@ useful record of the intended scope but does not capture all later UX changes.
 - The Settings gear in the upper-right opens general settings.
 - **Manage Quick Access** opens the entity chooser. The chooser does not
   replace the general settings screen.
-- The chooser fetches supported Home Assistant entities over Wi-Fi, supports
-  text search and domain filters, and uses custom rows rather than Material
-  `ListItem` to avoid a Karoo Compose measurement crash.
-- Selecting an entity opens an action picker. For lights and switches this has
-  one Add action; scripts likewise use one Add action. Existing configured
-  actions can be removed or reordered from the management screen.
+- The chooser fetches supported Home Assistant entities over direct Wi-Fi,
+  supports text search and domain filters, and uses custom rows rather than
+  Material `ListItem` to avoid a Karoo Compose measurement crash. Refresh is
+  disabled without Wi-Fi and the requirement is explained inline. A discovery
+  failure is shown on its own and is not presented as a successful empty
+  result.
+- Selecting an entity opens an action picker. Locks, covers, lights, switches,
+  and scripts each have one Add action; users do not choose separate lock or
+  cover operations. Existing configured actions can be removed or reordered
+  from the management screen.
 
 ## PIN protection
 
@@ -118,7 +131,8 @@ useful record of the intended scope but does not capture all later UX changes.
 
 - The app intentionally remains a curated control surface, not a Home
   Assistant dashboard or arbitrary service-call client.
-- Entity management and discovery require direct Wi-Fi.
+- Entity management and discovery require direct Wi-Fi because the full state
+  response can exceed the Companion transport's 100 KB limit.
 - Home Assistant state is retrieved through REST refresh/polling; the app does
   not maintain a WebSocket subscription.
 - Bundled icons are a curated domain-oriented set, not the full Material
