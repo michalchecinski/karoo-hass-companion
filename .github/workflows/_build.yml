@@ -9,6 +9,11 @@ on:
         required: false
         type: string
         default: ""
+      upload_debug_apk:
+        description: Upload the debug APK after a successful verification build.
+        required: false
+        type: boolean
+        default: false
     secrets:
       KEY_ALIAS:
         required: false
@@ -67,6 +72,14 @@ jobs:
         env:
           GH_USER: ${{ github.actor }}
           GH_TOKEN: ${{ github.token }}
+
+      - name: Upload debug APK
+        if: inputs.release_version == '' && inputs.upload_debug_apk
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        with:
+          name: karoo-hass-companion-debug.apk
+          path: app/build/outputs/apk/debug/app-debug.apk
+          if-no-files-found: error
 
       - name: Build signed release
         if: inputs.release_version != ''
