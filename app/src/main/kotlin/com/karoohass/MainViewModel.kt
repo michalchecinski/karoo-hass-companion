@@ -1,7 +1,11 @@
 package com.karoohass
 
 import android.app.Application
+import android.net.ConnectivityManager
+import android.net.Network
+import android.net.NetworkCapabilities
 import android.net.Uri
+import android.os.Build
 import android.util.Log
 import androidx.lifecycle.AndroidViewModel
 import androidx.lifecycle.viewModelScope
@@ -79,6 +83,18 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
     private val directTransport = DirectWifiTransport(application)
     private val wifiAvailable = MutableStateFlow(directTransport.isAvailable())
     private val entityDiscoveryStatus = MutableStateFlow(EntityDiscoveryStatus.NOT_STARTED)
+    private val connectivityManager = application.getSystemService(ConnectivityManager::class.java)
+    private val connectivityCallback =
+        object : ConnectivityManager.NetworkCallback() {
+            override fun onAvailable(network: Network) = updateWifiAvailability()
+
+            override fun onLost(network: Network) = updateWifiAvailability()
+
+            override fun onCapabilitiesChanged(
+                network: Network,
+                networkCapabilities: NetworkCapabilities,
+            ) = updateWifiAvailability()
+        }
     private val policyTransport = PolicyTransport({ state.value.settings.connectionPolicy }, directTransport, KarooTransport(application))
     private val repository = HomeAssistantRepository({ state.value.settings.origin }, policyTransport, tokens) { oauth.refresh(policyTransport) }
     private val wifiRepository = HomeAssistantRepository({ state.value.settings.origin }, directTransport, tokens) { oauth.refresh(directTransport) }
@@ -107,6 +123,9 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
         }.stateIn(viewModelScope, SharingStarted.Eagerly, UiState())
 
     init {
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.N) {
+            connectivityManager.registerDefaultNetworkCallback(connectivityCallback)
+        }
         viewModelScope.launch {
             val persisted = rawSettings.first()
             wholeAppLocked.value = persisted.pinMode == PinMode.WHOLE_APP && persisted.origin != null
@@ -415,6 +434,11 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
 
     fun enforceWholeAppPin() {
         if (state.value.settings.pinMode == PinMode.WHOLE_APP && state.value.settings.origin != null) wholeAppLocked.value = true
+    }
+
+    override fun onCleared() {
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.N) runCatching { connectivityManager.unregisterNetworkCallback(connectivityCallback) }
+        super.onCleared()
     }
 
     private fun updateWifiAvailability() {
