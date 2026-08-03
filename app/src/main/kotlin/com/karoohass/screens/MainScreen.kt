@@ -73,7 +73,9 @@ import com.karoohass.core.ConnectionPolicy
 import com.karoohass.core.EntitySnapshot
 import com.karoohass.core.PinMode
 import com.karoohass.core.QuickAccessAction
+import com.karoohass.core.actionHint
 import com.karoohass.core.availableActionKinds
+import com.karoohass.core.displayState
 import com.karoohass.core.label
 
 @OptIn(ExperimentalMaterial3Api::class)
@@ -82,7 +84,6 @@ fun MainScreen(
     state: UiState,
     model: MainViewModel,
 ) {
-    var confirm by remember { mutableStateOf<QuickAccessAction?>(null) }
     val displayedScreen =
         if (
             state.settings.origin != null &&
@@ -98,7 +99,7 @@ fun MainScreen(
             when (displayedScreen) {
                 Screen.HOME ->
                     Box(Modifier.padding(top = if (state.settings.origin != null) 48.dp else 0.dp)) {
-                        Home(state, { action -> if (action.requiresConfirmation) confirm = action else model.invoke(action) }, model::openSetup)
+                        Home(state, model::invoke, model::openSetup)
                     }
                 Screen.SETUP -> Setup(state, model)
                 Screen.AUTH -> OAuthWebView(model.currentAuthorizationUrl(), model::receiveOAuthCallback)
@@ -120,13 +121,14 @@ fun MainScreen(
             if (displayedScreen != Screen.SETUP) state.message?.let { Text(it, Modifier.align(Alignment.BottomCenter).padding(12.dp), color = MaterialTheme.colorScheme.error) }
         }
     }
-    confirm?.let { action ->
-        AlertDialog(onDismissRequest = { confirm = null }, title = { Text("Confirm action") }, text = { Text("${action.label(state.snapshots[action.entityId])}?") }, confirmButton = {
-            TextButton(onClick = {
-                confirm = null
-                model.invoke(action)
-            }) { Text("Confirm") }
-        }, dismissButton = { TextButton(onClick = { confirm = null }) { Text("Cancel") } })
+    state.confirmation?.takeIf { displayedScreen == Screen.HOME }?.let { resolved ->
+        AlertDialog(
+            onDismissRequest = model::dismissConfirmation,
+            title = { Text("Confirm action") },
+            text = { Text("${resolved.confirmationLabel(state.snapshots[resolved.action.entityId])}?") },
+            confirmButton = { TextButton(onClick = model::confirmResolvedAction) { Text("Confirm") } },
+            dismissButton = { TextButton(onClick = model::dismissConfirmation) { Text("Cancel") } },
+        )
     }
 }
 
@@ -171,25 +173,35 @@ fun MainScreen(
                         maxLines = 3,
                         overflow = TextOverflow.Ellipsis,
                     )
-                    if (actionOutcome != null) {
+                    if (action.kind != ActionKind.RUN_SCRIPT) {
+                        Text(
+                            when {
+                                entity == null && state.busy -> "Loading…"
+                                entity == null -> "State unavailable"
+                                else -> entity.displayState()
+                            },
+                            modifier = Modifier.fillMaxWidth(),
+                            textAlign = TextAlign.Center,
+                            color = if (entity?.available == false) MaterialTheme.colorScheme.error else MaterialTheme.colorScheme.onSurfaceVariant,
+                        )
+                    }
+                    if (action.kind in setOf(ActionKind.CONTROL_LOCK, ActionKind.CONTROL_COVER)) {
+                        Text(
+                            when {
+                                actionOutcome != null -> actionOutcome.statusText()
+                                state.busy && state.outcomeActionId == action.id -> "Checking state…"
+                                else -> action.actionHint(entity)
+                            },
+                            modifier = Modifier.fillMaxWidth(),
+                            textAlign = TextAlign.Center,
+                            color = if (actionOutcome in setOf(ActionOutcome.FAILED, ActionOutcome.UNKNOWN) || entity?.available == false) MaterialTheme.colorScheme.error else MaterialTheme.colorScheme.primary,
+                        )
+                    } else if (actionOutcome != null) {
                         Text(
                             actionOutcome.statusText(),
                             modifier = Modifier.fillMaxWidth(),
                             textAlign = TextAlign.Center,
                             color = if (actionOutcome in setOf(ActionOutcome.FAILED, ActionOutcome.UNKNOWN)) MaterialTheme.colorScheme.error else MaterialTheme.colorScheme.primary,
-                        )
-                    }
-                    if (action.kind != ActionKind.RUN_SCRIPT) {
-                        Text(
-                            when {
-                                state.busy && actionOutcome == null -> "Loading…"
-                                entity == null -> "State unavailable"
-                                !entity.available -> "Unavailable"
-                                else -> entity.state
-                            },
-                            modifier = Modifier.fillMaxWidth(),
-                            textAlign = TextAlign.Center,
-                            color = if (entity?.available == false) MaterialTheme.colorScheme.error else MaterialTheme.colorScheme.onSurfaceVariant,
                         )
                     }
                     if (action.protected) {
@@ -511,6 +523,8 @@ private fun ActionPicker(
                     when {
                         kinds.isEmpty() -> "This entity reports no supported Quick Access actions."
                         singleKind == ActionKind.TOGGLE -> "Add a toggle action."
+                        singleKind == ActionKind.CONTROL_LOCK -> "Add a state-aware lock control."
+                        singleKind == ActionKind.CONTROL_COVER -> "Add a state-aware cover control."
                         else -> "Choose operation"
                     },
                 )
@@ -523,6 +537,8 @@ private fun ActionPicker(
                         Checkbox(confirmation, setConfirmation)
                         Text("Confirm action")
                     }
+                    if (singleKind == ActionKind.CONTROL_LOCK) Text("Unlock is always confirmed.", style = MaterialTheme.typography.bodySmall)
+                    if (singleKind == ActionKind.CONTROL_COVER) Text("Open is always confirmed.", style = MaterialTheme.typography.bodySmall)
                 }
                 if (singleKind == null) kinds.forEach { kind -> TextButton(onClick = { add(kind) }) { Text(kind.label()) } }
             }
@@ -535,14 +551,9 @@ private fun ActionPicker(
 private fun ActionKind.label() =
     when (this) {
         ActionKind.RUN_SCRIPT -> "Run"
-        ActionKind.LOCK -> "Lock"
-        ActionKind.UNLOCK -> "Unlock"
-        ActionKind.OPEN_COVER -> "Open"
-        ActionKind.CLOSE_COVER -> "Close"
-        ActionKind.STOP_COVER -> "Stop"
+        ActionKind.CONTROL_LOCK -> "Control lock"
+        ActionKind.CONTROL_COVER -> "Control cover"
         ActionKind.TOGGLE -> "Toggle"
-        ActionKind.TURN_ON -> "Turn on"
-        ActionKind.TURN_OFF -> "Turn off"
     }
 
 @Composable private fun PinEntry(
@@ -569,6 +580,6 @@ private fun ActionKind.label() =
         )
         Button(onClick = unlock, enabled = pin.length in 4..6 && !state.unlocking) { Text("Unlock") }
         if (state.unlocking) CircularProgressIndicator(Modifier.padding(top = 16.dp))
-        state.pending?.let { Text(it.label(state.snapshots[it.entityId])) }
+        state.pending?.let { Text(it.confirmationLabel(state.snapshots[it.action.entityId])) }
     }
 }
