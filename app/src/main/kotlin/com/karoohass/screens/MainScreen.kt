@@ -448,7 +448,8 @@ private fun openOAuthCallback(
         item {
             Text("Choose an entity", style = MaterialTheme.typography.titleLarge)
             Text("Select an entity to add a Quick Access action.")
-            Button(onClick = model::discover, enabled = !state.busy) { Text(if (state.busy) "Loading…" else "Refresh entities") }
+            Button(onClick = model::discover, enabled = state.canDiscoverEntities) { Text(if (state.busy) "Loading…" else "Refresh entities") }
+            if (!state.wifiAvailable) Text("Connect to Wi-Fi to refresh available entities. Quick Access actions can still use Companion fallback.")
         }
         item { OutlinedTextField(query, { query = it }, label = { Text("Search entities") }, singleLine = true, modifier = Modifier.fillMaxWidth()) }
         item {
@@ -459,7 +460,7 @@ private fun openOAuthCallback(
                 }
             }
         }
-        if (!state.busy && entities.isEmpty()) item { Text("No supported entities found.") }
+        if (state.showNoSupportedEntities) item { Text("No supported entities found.") }
         if (!state.busy && entities.isNotEmpty() && filteredEntities.isEmpty()) item { Text("No entities match these filters.") }
         items(filteredEntities, key = { it.entityId }) { entity ->
             ElevatedCard(Modifier.fillMaxWidth().clickable { selected = entity }) {

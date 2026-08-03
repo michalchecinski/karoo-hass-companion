@@ -13,7 +13,13 @@ class HomeAssistantRepository(
     private val tokens: TokenStore,
     private val refresh: suspend () -> Boolean,
 ) {
-    suspend fun discover(): List<EntitySnapshot> = request("GET", "/api/states").body?.let { parseStates(JSONArray(String(it))) } ?: emptyList()
+    suspend fun discover(): List<EntitySnapshot> {
+        val response = request("GET", "/api/states")
+        response.error?.let { throw TransportException.Failure(it) }
+        if (response.code !in 200..299) throw TransportException.Failure("Home Assistant returned HTTP ${response.code}")
+        val body = response.body ?: throw TransportException.Failure("Home Assistant returned an empty response")
+        return parseStates(JSONArray(String(body)))
+    }
 
     suspend fun refresh(entityId: String): EntitySnapshot? = runCatching { request("GET", "/api/states/$entityId").body?.let { parseState(JSONObject(String(it))) } }.getOrNull()
 

@@ -137,6 +137,14 @@ situations, but it adds the paired phone and Companion app to the connection
 path. The app should explain this trade-off and must not enable fallback
 without the user's explicit choice.
 
+Quick Access entity discovery and management require direct Wi-Fi because the
+full Home Assistant state response can exceed the Companion transport's 100 KB
+limit. The entity refresh control should be disabled without Wi-Fi and explain
+the requirement, while normal Quick Access actions continue to follow the
+connection policy selected by the user. A discovery failure must not also
+imply that Home Assistant contains no supported entities; an empty result
+should be shown only after a successful discovery request returns none.
+
 ### Honest
 
 Home Assistant accepting a request does not always prove that a physical

@@ -1,7 +1,11 @@
 package com.karoohass
 
 import android.app.Application
+import android.net.ConnectivityManager
+import android.net.Network
+import android.net.NetworkCapabilities
 import android.net.Uri
+import android.os.Build
 import android.util.Log
 import androidx.lifecycle.AndroidViewModel
 import androidx.lifecycle.viewModelScope
@@ -40,6 +44,8 @@ data class UiState(
     val snapshots: Map<String, EntitySnapshot> = emptyMap(),
     val screen: Screen = Screen.HOME,
     val busy: Boolean = false,
+    val wifiAvailable: Boolean = false,
+    val entityDiscoveryStatus: EntityDiscoveryStatus = EntityDiscoveryStatus.NOT_STARTED,
     val message: String? = null,
     val outcome: ActionOutcome? = null,
     val outcomeActionId: String? = null,
@@ -48,9 +54,17 @@ data class UiState(
     val authorizedUntil: Long = 0,
     val unlocking: Boolean = false,
     val wholeAppLocked: Boolean = false,
-)
+) {
+    val canDiscoverEntities: Boolean
+        get() = wifiAvailable && !busy
+
+    val showNoSupportedEntities: Boolean
+        get() = canDiscoverEntities && snapshots.isEmpty() && entityDiscoveryStatus == EntityDiscoveryStatus.SUCCEEDED
+}
 
 enum class Screen { HOME, SETUP, AUTH, MANAGE, PIN }
+
+enum class EntityDiscoveryStatus { NOT_STARTED, LOADING, SUCCEEDED, FAILED }
 
 class MainViewModel(application: Application) : AndroidViewModel(application) {
     private val settingsStore = SettingsStore(application)
@@ -72,20 +86,52 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
     private var actionIntentGeneration = 0L
     private var authorizationUrl: String? = null
     private val directTransport = DirectWifiTransport(application)
+    private val wifiAvailable = MutableStateFlow(directTransport.isAvailable())
+    private val entityDiscoveryStatus = MutableStateFlow(EntityDiscoveryStatus.NOT_STARTED)
+    private val connectivityManager = application.getSystemService(ConnectivityManager::class.java)
+    private val connectivityCallback =
+        object : ConnectivityManager.NetworkCallback() {
+            override fun onAvailable(network: Network) = updateWifiAvailability()
+
+            override fun onLost(network: Network) = updateWifiAvailability()
+
+            override fun onCapabilitiesChanged(
+                network: Network,
+                networkCapabilities: NetworkCapabilities,
+            ) = updateWifiAvailability()
+        }
     private val policyTransport = PolicyTransport({ state.value.settings.connectionPolicy }, directTransport, KarooTransport(application))
     private val repository = HomeAssistantRepository({ state.value.settings.origin }, policyTransport, tokens) { oauth.refresh(policyTransport) }
     private val wifiRepository = HomeAssistantRepository({ state.value.settings.origin }, directTransport, tokens) { oauth.refresh(directTransport) }
     val state: StateFlow<UiState> =
         combine(
             combine(rawSettings, screen) { settings, current -> settings to current },
-            combine(snapshots, work) { loaded, isBusy -> loaded to isBusy },
+            combine(snapshots, work, wifiAvailable, entityDiscoveryStatus) { loaded, isBusy, isWifiAvailable, discoveryStatus -> DiscoveryUiState(loaded, isBusy, isWifiAvailable, discoveryStatus) },
             combine(message, pending, confirmation) { notice, request, confirmationRequest -> ActionUiState(notice, request, confirmationRequest) },
             combine(outcome, outcomeActionId, authorizedUntil, unlocking, wholeAppLocked) { result, actionId, auth, isUnlocking, isWholeAppLocked -> PinUiState(result, actionId, auth, isUnlocking, isWholeAppLocked) },
-        ) { settingsAndScreen, snapshotsAndWork, messageAndPending, outcomeAndAuth ->
-            UiState(settingsAndScreen.first, snapshotsAndWork.first, settingsAndScreen.second, snapshotsAndWork.second, messageAndPending.message, outcomeAndAuth.outcome, outcomeAndAuth.actionId, messageAndPending.pending, messageAndPending.confirmation, outcomeAndAuth.authorizedUntil, outcomeAndAuth.unlocking, outcomeAndAuth.wholeAppLocked)
+        ) { settingsAndScreen, discovery, action, pin ->
+            UiState(
+                settings = settingsAndScreen.first,
+                snapshots = discovery.snapshots,
+                screen = settingsAndScreen.second,
+                busy = discovery.busy,
+                wifiAvailable = discovery.wifiAvailable,
+                entityDiscoveryStatus = discovery.status,
+                message = action.message,
+                outcome = pin.outcome,
+                outcomeActionId = pin.actionId,
+                pending = action.pending,
+                confirmation = action.confirmation,
+                authorizedUntil = pin.authorizedUntil,
+                unlocking = pin.unlocking,
+                wholeAppLocked = pin.wholeAppLocked,
+            )
         }.stateIn(viewModelScope, SharingStarted.Eagerly, UiState())
 
     init {
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.N) {
+            connectivityManager.registerDefaultNetworkCallback(connectivityCallback)
+        }
         viewModelScope.launch {
             val persisted = rawSettings.first()
             wholeAppLocked.value = persisted.pinMode == PinMode.WHOLE_APP && persisted.origin != null
@@ -105,8 +151,10 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
     }
 
     fun openEntityChooser() {
+        message.value = null
         screen.value = Screen.MANAGE
-        discover()
+        updateWifiAvailability()
+        if (wifiAvailable.value) discover()
     }
 
     fun home() {
@@ -222,13 +270,32 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
     fun discover() = viewModelScope.launch { refreshEntities(silent = false) }
 
     private suspend fun refreshEntities(silent: Boolean) {
+        updateWifiAvailability()
+        if (!wifiAvailable.value) {
+            work.value = false
+            entityDiscoveryStatus.value = EntityDiscoveryStatus.FAILED
+            if (!silent) message.value = null
+            return
+        }
         work.value = true
-        runCatching { wifiRepository.discover() }.onSuccess { found ->
+        entityDiscoveryStatus.value = EntityDiscoveryStatus.LOADING
+        if (!silent) message.value = null
+        try {
+            val found = wifiRepository.discover()
             val byId = found.associateBy { it.entityId }
             snapshots.value = byId
             settingsStore.update { old -> old.copy(actions = old.actions.map { action -> byId[action.entityId]?.let { entity -> action.copy(displayName = entity.friendlyName, icon = entity.icon ?: action.icon) } ?: action }) }
-        }.onFailure { if (!silent) message.value = it.message ?: "Could not load entities over Wi-Fi" }
-        work.value = false
+            entityDiscoveryStatus.value = EntityDiscoveryStatus.SUCCEEDED
+        } catch (error: CancellationException) {
+            throw error
+        } catch (error: Exception) {
+            updateWifiAvailability()
+            entityDiscoveryStatus.value = EntityDiscoveryStatus.FAILED
+            if (!silent) message.value = if (wifiAvailable.value) error.message ?: "Could not load entities over Wi-Fi" else null
+        } finally {
+            updateWifiAvailability()
+            work.value = false
+        }
     }
 
     fun add(
@@ -405,6 +472,7 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
             pinStore.clear()
             settingsStore.update { AppSettings() }
             snapshots.value = emptyMap()
+            entityDiscoveryStatus.value = EntityDiscoveryStatus.NOT_STARTED
             outcome.value = null
             outcomeActionId.value = null
             confirmation.value = null
@@ -413,7 +481,9 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
         }
 
     fun foregroundChanged(foreground: Boolean) {
-        if (!foreground) {
+        if (foreground) {
+            updateWifiAvailability()
+        } else {
             actionIntentGeneration++
             confirmation.value = null
             if (pending.value != null) {
@@ -431,12 +501,28 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
         if (state.value.settings.pinMode == PinMode.WHOLE_APP && state.value.settings.origin != null) wholeAppLocked.value = true
     }
 
+    override fun onCleared() {
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.N) runCatching { connectivityManager.unregisterNetworkCallback(connectivityCallback) }
+        super.onCleared()
+    }
+
+    private fun updateWifiAvailability() {
+        wifiAvailable.value = directTransport.isAvailable()
+    }
+
     private data class PinUiState(
         val outcome: ActionOutcome?,
         val actionId: String?,
         val authorizedUntil: Long,
         val unlocking: Boolean,
         val wholeAppLocked: Boolean,
+    )
+
+    private data class DiscoveryUiState(
+        val snapshots: Map<String, EntitySnapshot>,
+        val busy: Boolean,
+        val wifiAvailable: Boolean,
+        val status: EntityDiscoveryStatus,
     )
 
     private data class ActionUiState(
