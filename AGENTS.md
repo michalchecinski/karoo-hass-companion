@@ -14,6 +14,10 @@ Do not update any dependencies if not asked or allowed directly.
 Before specification, planning, or implementation, read `docs` folders to identify
 conventions, product boundaries, and other information relevant to the change.
 
+### Git branches
+
+Do not use an `agent/` prefix for branch names.
+
 ### Hammerhead Karoo integration
 
 When implementing Hammerhead Karoo functionality please follow guidelines and code samples from the following official Karoo sdk repository: https://github.com/hammerheadnav/karoo-ext. Especially different data sources, types and extensions are available here: https://github.com/hammerheadnav/karoo-ext/tree/master/app/src/main/kotlin/io/hammerhead/sampleext/extension.

@@ -24,6 +24,7 @@ class MainActivity : ComponentActivity() {
 
     override fun onResume() {
         super.onResume()
+        model.foregroundChanged(true)
         model.callbackReceived()
         model.enforceWholeAppPin()
     }
