@@ -1,0 +1,4 @@
+interface:
+  display_name: "Karoo Screenshots"
+  short_description: "Capture clean Karoo app screenshots and document them."
+  default_prompt: "Use $karoo-screenshots to capture updated Karoo app screens and update the README gallery."
