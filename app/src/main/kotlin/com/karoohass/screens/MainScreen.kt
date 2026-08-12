@@ -83,6 +83,7 @@ import com.karoohass.core.label
 fun MainScreen(
     state: UiState,
     model: MainViewModel,
+    onExit: () -> Unit,
 ) {
     val displayedScreen =
         if (
@@ -111,11 +112,16 @@ fun MainScreen(
                     Icon(painterResource(R.drawable.ic_settings), contentDescription = "Settings")
                 }
             }
-            if (displayedScreen != Screen.HOME && displayedScreen != Screen.PIN) {
+            if (displayedScreen != Screen.PIN) {
                 Image(
                     painter = painterResource(R.drawable.back),
                     contentDescription = "Back",
-                    modifier = Modifier.align(Alignment.BottomStart).padding(bottom = 10.dp).size(54.dp).clickable(onClick = model::back),
+                    modifier =
+                        Modifier
+                            .align(Alignment.BottomStart)
+                            .padding(bottom = 10.dp)
+                            .size(54.dp)
+                            .clickable(onClick = if (displayedScreen == Screen.HOME) onExit else model::back),
                 )
             }
             if (displayedScreen != Screen.SETUP) state.message?.let { Text(it, Modifier.align(Alignment.BottomCenter).padding(12.dp), color = MaterialTheme.colorScheme.error) }
@@ -147,7 +153,7 @@ fun MainScreen(
     }
     LazyVerticalGrid(
         GridCells.Fixed(2),
-        contentPadding = PaddingValues(10.dp),
+        contentPadding = PaddingValues(start = 10.dp, top = 10.dp, end = 10.dp, bottom = 74.dp),
         verticalArrangement = Arrangement.spacedBy(8.dp),
         horizontalArrangement = Arrangement.spacedBy(8.dp),
     ) {

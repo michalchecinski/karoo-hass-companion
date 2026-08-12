@@ -98,9 +98,10 @@ useful record of the intended scope but does not capture all later UX changes.
 - The Home Assistant title bar is intentionally omitted from the Quick Access
   screen. The settings gear remains in the upper-right and is kept clear of
   tile content.
-- Non-home, non-PIN screens use the same lower-left back control as
+- All non-PIN screens use the same lower-left back control as
   `karoo-camera-control`: its 54 dp `back.png` image with a 10 dp bottom
-  inset and direct tap target.
+  inset and direct tap target. On Quick Access, it exits the app; its grid
+  keeps a clear bottom inset for the control.
 - Back navigates to the immediate parent: entity chooser or OAuth screen to
   Settings, and Settings to Home. PIN entry has no back control.
 - The setup heading uses the compact `titleMedium` style for the Karoo display.
