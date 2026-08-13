@@ -20,6 +20,12 @@ Karoo Home Assistant Companion is a focused Home Assistant remote for the Hammer
 - Turn on outdoor or entrance lights when coming home after dark.
 - Run a script near the end of your ride to prepare a comfortable temperature at home before you return.
 
+## Screenshots
+
+![Quick Access](screenshots/emulator-karoo-480x800/main-empty-app-only.png)
+![Set up Home Assistant](screenshots/emulator-karoo-480x800/onboarding-app-only.png)
+![Settings](screenshots/emulator-karoo-480x800/settings-connected-app-only.png)
+
 ## Installation
 
 ### New Karoo (aka Karoo 3)

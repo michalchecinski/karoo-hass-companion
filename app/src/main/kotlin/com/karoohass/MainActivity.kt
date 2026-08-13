@@ -17,7 +17,7 @@ class MainActivity : ComponentActivity() {
         setContent {
             AppTheme {
                 val state by model.state.collectAsStateWithLifecycle()
-                MainScreen(state, model)
+                MainScreen(state, model, ::finish)
             }
         }
     }

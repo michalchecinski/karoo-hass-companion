@@ -78,11 +78,16 @@ import com.karoohass.core.availableActionKinds
 import com.karoohass.core.displayState
 import com.karoohass.core.label
 
+private val BackControlSize = 54.dp
+private val BackControlBottomInset = 10.dp
+private val HomeGridBottomPadding = BackControlSize + BackControlBottomInset + BackControlBottomInset
+
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun MainScreen(
     state: UiState,
     model: MainViewModel,
+    onExit: () -> Unit,
 ) {
     val displayedScreen =
         if (
@@ -111,11 +116,16 @@ fun MainScreen(
                     Icon(painterResource(R.drawable.ic_settings), contentDescription = "Settings")
                 }
             }
-            if (displayedScreen != Screen.HOME && displayedScreen != Screen.PIN) {
+            if (displayedScreen != Screen.PIN) {
                 Image(
                     painter = painterResource(R.drawable.back),
                     contentDescription = "Back",
-                    modifier = Modifier.align(Alignment.BottomStart).padding(bottom = 10.dp).size(54.dp).clickable(onClick = model::back),
+                    modifier =
+                        Modifier
+                            .align(Alignment.BottomStart)
+                            .padding(bottom = BackControlBottomInset)
+                            .size(BackControlSize)
+                            .clickable(onClick = if (displayedScreen == Screen.HOME) onExit else model::back),
                 )
             }
             if (displayedScreen != Screen.SETUP) state.message?.let { Text(it, Modifier.align(Alignment.BottomCenter).padding(12.dp), color = MaterialTheme.colorScheme.error) }
@@ -147,7 +157,7 @@ fun MainScreen(
     }
     LazyVerticalGrid(
         GridCells.Fixed(2),
-        contentPadding = PaddingValues(10.dp),
+        contentPadding = PaddingValues(start = 10.dp, top = 10.dp, end = 10.dp, bottom = HomeGridBottomPadding),
         verticalArrangement = Arrangement.spacedBy(8.dp),
         horizontalArrangement = Arrangement.spacedBy(8.dp),
     ) {
