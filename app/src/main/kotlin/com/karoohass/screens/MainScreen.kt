@@ -78,6 +78,10 @@ import com.karoohass.core.availableActionKinds
 import com.karoohass.core.displayState
 import com.karoohass.core.label
 
+private val BackControlSize = 54.dp
+private val BackControlBottomInset = 10.dp
+private val HomeGridBottomPadding = BackControlSize + BackControlBottomInset + BackControlBottomInset
+
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun MainScreen(
@@ -119,8 +123,8 @@ fun MainScreen(
                     modifier =
                         Modifier
                             .align(Alignment.BottomStart)
-                            .padding(bottom = 10.dp)
-                            .size(54.dp)
+                            .padding(bottom = BackControlBottomInset)
+                            .size(BackControlSize)
                             .clickable(onClick = if (displayedScreen == Screen.HOME) onExit else model::back),
                 )
             }
@@ -153,7 +157,7 @@ fun MainScreen(
     }
     LazyVerticalGrid(
         GridCells.Fixed(2),
-        contentPadding = PaddingValues(start = 10.dp, top = 10.dp, end = 10.dp, bottom = 74.dp),
+        contentPadding = PaddingValues(start = 10.dp, top = 10.dp, end = 10.dp, bottom = HomeGridBottomPadding),
         verticalArrangement = Arrangement.spacedBy(8.dp),
         horizontalArrangement = Arrangement.spacedBy(8.dp),
     ) {
