@@ -1,4 +1,4 @@
-# Home Assistant companion for Hammerhead Karoo
+#  Karoo Home Assistant Companion
 
 Karoo Home Assistant Companion is a focused Home Assistant remote for the Hammerhead Karoo bike computer. It provides quick access to a small collection of actions selected by the rider instead of reproducing a complete Home Assistant dashboard.
 
