@@ -481,16 +481,38 @@ private fun openOAuthCallback(
         items(state.settings.actions.size) { index ->
             val action = state.settings.actions[index]
             ElevatedCard(Modifier.fillMaxWidth()) {
-                Row(Modifier.fillMaxWidth().padding(8.dp), verticalAlignment = Alignment.CenterVertically) {
-                    HomeAssistantIcon(action.icon, action.domain)
-                    Spacer(Modifier.width(8.dp))
-                    Column(Modifier.weight(1f)) {
-                        Text(action.label(state.snapshots[action.entityId]), maxLines = 2)
-                        Text(if (state.snapshots.containsKey(action.entityId)) "Configured" else "Entity unavailable", style = MaterialTheme.typography.bodySmall)
+                Column(Modifier.fillMaxWidth().padding(12.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                    Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
+                        HomeAssistantIcon(action.icon, action.domain)
+                        Spacer(Modifier.width(12.dp))
+                        Column(Modifier.weight(1f)) {
+                            Text(
+                                action.label(state.snapshots[action.entityId]),
+                                maxLines = 2,
+                                overflow = TextOverflow.Ellipsis,
+                            )
+                            Text(
+                                if (state.snapshots.containsKey(action.entityId)) "Configured" else "Entity unavailable",
+                                style = MaterialTheme.typography.bodySmall,
+                            )
+                        }
                     }
-                    TextButton(onClick = { model.move(action, -1) }, contentPadding = PaddingValues(4.dp)) { Text("↑") }
-                    TextButton(onClick = { model.move(action, 1) }, contentPadding = PaddingValues(4.dp)) { Text("↓") }
-                    TextButton(onClick = { model.remove(action) }, contentPadding = PaddingValues(4.dp)) { Text("×") }
+                    Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                        TextButton(
+                            onClick = { model.move(action, -1) },
+                            modifier = Modifier.weight(1f).heightIn(min = 48.dp),
+                            enabled = index > 0,
+                        ) { Text("Move up", maxLines = 1) }
+                        TextButton(
+                            onClick = { model.move(action, 1) },
+                            modifier = Modifier.weight(1f).heightIn(min = 48.dp),
+                            enabled = index < state.settings.actions.lastIndex,
+                        ) { Text("Move down", maxLines = 1) }
+                    }
+                    TextButton(
+                        onClick = { model.remove(action) },
+                        modifier = Modifier.fillMaxWidth().heightIn(min = 48.dp),
+                    ) { Text("Remove from Quick Access") }
                 }
             }
         }
