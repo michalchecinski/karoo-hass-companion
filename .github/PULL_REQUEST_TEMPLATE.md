@@ -12,7 +12,7 @@
 
 ## Checklist
 
-- [ ] The PR has exactly one `version:*` label.
+- [ ] The PR has `version:*` label.
 - [ ] The title is suitable for a non-technical public changelog, or `skip-changelog` is applied.
 - [ ] `./gradlew ktlintCheck check assembleDebug` passes.
 - [ ] Behavior changes were tested on a physical Karoo and Home Assistant installation where applicable.

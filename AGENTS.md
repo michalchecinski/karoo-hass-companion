@@ -1,7 +1,7 @@
 # Karoo Home Assistant companion
 Karoo Home Assistant companion (`karoo hass companion` or `karoo hass` in short) is an app that allows to make simple actions on your Home Assistant installation using Hammerhead Karoo bike computer. It's like CarPlay companion equivalent for bike computer.
 
-### Project overview
+## Project overview
 The project is built using:
 - Language: Kotlin
 - UI Framework: Jetpack Compose (Material3)
@@ -9,16 +9,24 @@ The project is built using:
 
 Do not update any dependencies if not asked or allowed directly.
 
-### Docs
+## Docs
 
-Before specification, planning, or implementation, read `docs` folders to identify
-conventions, product boundaries, and other information relevant to the change.
+Before specification, planning, or implementation, read `docs` folders to identify conventions, product boundaries, and other information relevant to the change.
 
-### Git branches
+After adding new feature add Markdown document explaining it in the `docs` folders.
+When changing behaviour, UI or other part of the app, update the appropriate document in the `docs` folder.
+
+## Git & GitHub
+
+### branches
 
 Do not use an `agent/` prefix for branch names.
 
-### Hammerhead Karoo integration
+### PR
+When creating PR use `.github/PULL_REQUEST_TEMPLATE.md` and check all items on checklist.
+When there was a UI change in the PR include screenshots of changed screens only (use `karoo-screenshots` skill).
+
+## Hammerhead Karoo integration
 
 When implementing Hammerhead Karoo functionality please follow guidelines and code samples from the following official Karoo sdk repository: https://github.com/hammerheadnav/karoo-ext. Especially different data sources, types and extensions are available here: https://github.com/hammerheadnav/karoo-ext/tree/master/app/src/main/kotlin/io/hammerhead/sampleext/extension.
 
