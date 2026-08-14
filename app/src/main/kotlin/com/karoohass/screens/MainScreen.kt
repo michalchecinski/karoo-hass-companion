@@ -131,6 +131,14 @@ fun MainScreen(
                             .clickable(onClick = if (displayedScreen == Screen.HOME) onExit else model::back),
                 )
             }
+            if (displayedScreen == Screen.MANAGE) {
+                Button(
+                    onClick = model::home,
+                    modifier = Modifier.align(Alignment.BottomEnd).padding(end = 12.dp, bottom = 16.dp),
+                ) {
+                    Text("Done")
+                }
+            }
             if (displayedScreen != Screen.SETUP) state.message?.let { Text(it, Modifier.align(Alignment.BottomCenter).padding(12.dp), color = MaterialTheme.colorScheme.error) }
         }
     }
@@ -611,7 +619,11 @@ private fun openOAuthCallback(
                     (query.isBlank() || entity.friendlyName.contains(query, ignoreCase = true) || entity.entityId.contains(query, ignoreCase = true))
             }
         }
-    LazyColumn(Modifier.fillMaxSize().padding(12.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
+    LazyColumn(
+        modifier = Modifier.fillMaxSize().padding(12.dp),
+        contentPadding = PaddingValues(bottom = 64.dp),
+        verticalArrangement = Arrangement.spacedBy(8.dp),
+    ) {
         item {
             Text("Choose an entity", style = MaterialTheme.typography.titleLarge)
             Text("Select an entity to add a Quick Access action.")
