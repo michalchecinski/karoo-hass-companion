@@ -1,0 +1,17 @@
+# Roadmap
+
+## Buttons and scenes
+
+Add Home Assistant button and scene entities as deliberate one-tap Quick Access controls.
+
+## Cover position (reporting and setting)
+
+Show a cover's reported position and let the rider request a specific position without replacing the existing open, close, and stop controls.
+
+## Icons 1:1 from Home Assistant configuration
+
+Render the icon configured for each entity in Home Assistant instead of mapping it to the app's small bundled icon set.
+
+## WebSocket-based state updates
+
+Use live Home Assistant state updates while the app is active, so Quick Access reflects changes made outside the Karoo without manual refreshes.

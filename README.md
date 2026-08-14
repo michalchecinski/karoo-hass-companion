@@ -61,6 +61,10 @@ Build and verify the application with JDK 17:
 ./gradlew ktlintCheck check assembleDebug
 ```
 
+## Roadmap
+
+See the [roadmap](docs/roadmap.md) for planned work.
+
 ## How can I help?
 
 Submit a [GitHub issue](https://github.com/michalchecinski/karoo-hass-companion/issues) with a feature request or bug report. To help with development, refer to the [contributing guide](CONTRIBUTING.md).
