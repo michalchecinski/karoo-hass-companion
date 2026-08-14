@@ -69,7 +69,8 @@ useful record of the intended scope but does not capture all later UX changes.
 - Selecting an entity opens an action picker. Locks, covers, lights, switches,
   and scripts each have one Add action; users do not choose separate lock or
   cover operations. Existing configured actions can be removed or reordered
-  from the management screen.
+  from the management screen. After adding a control, users remain on that
+  screen to add more; its **Done** button returns to Quick Access.
 
 ## PIN protection
 
@@ -102,7 +103,8 @@ useful record of the intended scope but does not capture all later UX changes.
   `karoo-camera-control`: its 54 dp `back.png` image with a 10 dp bottom
   inset and direct tap target.
 - Back navigates to the immediate parent: entity chooser or OAuth screen to
-  Settings, and Settings to Home. PIN entry has no back control.
+  Settings, and Settings to Home. The entity chooser also has a **Done**
+  control that intentionally returns to Home. PIN entry has no back control.
 - The setup heading uses the compact `titleMedium` style for the Karoo display.
 
 ## Validation performed during implementation
