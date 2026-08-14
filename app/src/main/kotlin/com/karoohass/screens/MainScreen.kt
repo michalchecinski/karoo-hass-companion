@@ -512,8 +512,10 @@ private fun ConnectionPolicy.title() =
 
 private fun ConnectionPolicy.description() =
     when (this) {
-        ConnectionPolicy.WIFI_ONLY -> "Only connect directly through Karoo Wi-Fi."
-        ConnectionPolicy.ALLOW_COMPANION_FALLBACK -> "When Wi-Fi is unavailable, allow the paired phone and Companion app to provide the connection."
+        ConnectionPolicy.WIFI_ONLY ->
+            "Use only Karoo Wi-Fi. More private, but controls are unavailable where that Wi-Fi cannot reach, such as a driveway or outside door."
+        ConnectionPolicy.ALLOW_COMPANION_FALLBACK ->
+            "Use your paired phone and Hammerhead Companion when Wi-Fi is absent, so Quick Access can work while riding away from home."
     }
 
 private fun PinMode.title() =
