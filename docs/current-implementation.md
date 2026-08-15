@@ -55,6 +55,9 @@ useful record of the intended scope but does not capture all later UX changes.
   and unavailable entities explain why no action can currently be sent.
 - Tiles can be PIN-protected in selected-actions PIN mode. Tiles are disabled
   while an entity refresh or action request is in progress.
+- If Karoo opens without Wi-Fi, configured Quick Access controls automatically
+  refresh after Wi-Fi reconnects. The refresh waits for any in-progress request
+  and does not run while whole-app PIN protection is locked.
 - Lock and cover controls refresh their state immediately before resolving an
   operation, then poll Home Assistant after execution to update the visible
   state. Cover Stop performs a best-effort state refresh without claiming
