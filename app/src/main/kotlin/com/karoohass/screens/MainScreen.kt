@@ -54,6 +54,7 @@ import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.text.input.ImeAction
 import androidx.compose.ui.text.input.KeyboardType
@@ -155,7 +156,8 @@ fun MainScreen(
     }
 }
 
-@Composable private fun Home(
+@Composable
+internal fun Home(
     state: UiState,
     invoke: (QuickAccessAction) -> Unit,
     setup: () -> Unit,
@@ -182,6 +184,7 @@ fun MainScreen(
                 Modifier
                     .heightIn(min = 110.dp)
                     .fillMaxWidth()
+                    .testTag("quick-access-${action.id}")
                     .clickable(enabled = !state.busy && (entity?.available != false)) { invoke(action) },
             ) {
                 Column(Modifier.padding(12.dp), verticalArrangement = Arrangement.SpaceBetween) {
@@ -711,7 +714,7 @@ private fun openOAuthCallback(
 }
 
 @Composable
-private fun ActionPicker(
+internal fun ActionPicker(
     entity: EntitySnapshot,
     protect: Boolean,
     confirmation: Boolean,
@@ -755,7 +758,15 @@ private fun ActionPicker(
                 if (singleKind == null) kinds.forEach { kind -> TextButton(onClick = { add(kind) }) { Text(kind.label()) } }
             }
         },
-        confirmButton = { if (singleKind != null) TextButton(onClick = { add(singleKind) }, enabled = !alreadyAdded) { Text("Add") } },
+        confirmButton = {
+            if (singleKind != null) {
+                TextButton(
+                    onClick = { add(singleKind) },
+                    enabled = !alreadyAdded,
+                    modifier = Modifier.testTag("action-picker-add"),
+                ) { Text("Add") }
+            }
+        },
         dismissButton = { TextButton(onClick = dismiss) { Text("Cancel") } },
     )
 }
