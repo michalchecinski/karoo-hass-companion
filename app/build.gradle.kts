@@ -108,4 +108,5 @@ dependencies {
     implementation(libs.androidx.activity.compose)
     implementation(libs.bundles.compose.ui)
     testImplementation(libs.junit)
+    testImplementation(libs.json)
 }

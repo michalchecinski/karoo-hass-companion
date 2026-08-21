@@ -122,6 +122,34 @@ class ActionSemanticsTest {
         assertEquals("off", toggle.startingState)
     }
 
+    @Test fun `button and scene expose one stateless action`() {
+        val button = snapshot("button.garage_remote", "unknown")
+        val scene = snapshot("scene.arrive_home", "scening")
+
+        assertEquals(listOf(ActionKind.PRESS_BUTTON), button.availableActionKinds())
+        assertEquals(listOf(ActionKind.ACTIVATE_SCENE), scene.availableActionKinds())
+        assertEquals("press", action(ActionKind.PRESS_BUTTON, button.entityId).resolve(null)!!.serviceName)
+        assertEquals("turn_on", action(ActionKind.ACTIVATE_SCENE, scene.entityId).resolve(null)!!.serviceName)
+        assertTrue(ActionKind.PRESS_BUTTON.isStatelessControl())
+        assertTrue(ActionKind.ACTIVATE_SCENE.isStatelessControl())
+    }
+
+    @Test fun `stateless management labels describe the action`() {
+        val button = action(ActionKind.PRESS_BUTTON, "button.garage_remote")
+        val scene = action(ActionKind.ACTIVATE_SCENE, "scene.arrive_home")
+
+        assertEquals("Press Test entity", button.label())
+        assertEquals("Activate Test entity", scene.label())
+    }
+
+    @Test fun `duplicate identity includes entity and action kind`() {
+        val actions = listOf(action(ActionKind.PRESS_BUTTON, "button.garage_remote"))
+
+        assertTrue(hasActionIdentity(actions, "button.garage_remote", ActionKind.PRESS_BUTTON))
+        assertFalse(hasActionIdentity(actions, "button.garage_remote", ActionKind.ACTIVATE_SCENE))
+        assertFalse(hasActionIdentity(actions, "button.other_remote", ActionKind.PRESS_BUTTON))
+    }
+
     private fun action(
         kind: ActionKind,
         entityId: String,

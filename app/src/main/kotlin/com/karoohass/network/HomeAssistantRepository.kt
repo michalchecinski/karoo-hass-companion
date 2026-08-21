@@ -3,14 +3,14 @@ package com.karoohass.network
 import com.karoohass.core.ActionOutcome
 import com.karoohass.core.EntitySnapshot
 import com.karoohass.core.ResolvedAction
-import com.karoohass.security.TokenStore
+import com.karoohass.security.Tokens
 import org.json.JSONArray
 import org.json.JSONObject
 
 class HomeAssistantRepository(
     private val origin: () -> String?,
     private val transport: HttpTransport,
-    private val tokens: TokenStore,
+    private val tokens: () -> Tokens?,
     private val refresh: suspend () -> Boolean,
 ) {
     suspend fun discover(): List<EntitySnapshot> {
@@ -34,7 +34,13 @@ class HomeAssistantRepository(
             } catch (_: TransportException) {
                 return ActionOutcome.UNKNOWN
             }
-        return if (response.code in 200..299) {
+        return if (response.error != null) {
+            ActionOutcome.UNKNOWN
+        } else if (response.code in 200..299) {
+            // The REST API returns an array for accepted service calls. Treat a missing or
+            // malformed success body as uncertain rather than claiming that it was accepted.
+            val responseBody = response.body ?: return ActionOutcome.UNKNOWN
+            if (runCatching { JSONArray(String(responseBody)) }.isFailure) return ActionOutcome.UNKNOWN
             if (action.expectedState == null) {
                 ActionOutcome.REQUESTED
             } else {
@@ -67,14 +73,14 @@ class HomeAssistantRepository(
         body: ByteArray? = null,
     ): HttpResponse {
         val base = origin() ?: throw TransportException.Failure("Home Assistant is not configured")
-        var token = tokens.load()?.accessToken ?: throw TransportException.Failure("Sign in is required")
+        var token = tokens()?.accessToken ?: throw TransportException.Failure("Sign in is required")
         var response = transport.execute(HttpRequest(method, "$base$path", mapOf("Authorization" to "Bearer $token", "Content-Type" to "application/json"), body))
         if (response.code == 401) {
             val refreshed = refresh()
             // Service POSTs are never replayed automatically. The refreshed token is
             // retained so the user can deliberately invoke the action again.
             if (refreshed && method in setOf("GET", "HEAD")) {
-                token = tokens.load()?.accessToken ?: token
+                token = tokens()?.accessToken ?: token
                 response = transport.execute(HttpRequest(method, "$base$path", mapOf("Authorization" to "Bearer $token", "Content-Type" to "application/json"), body))
             }
         }
@@ -90,6 +96,6 @@ class HomeAssistantRepository(
     }
 
     companion object {
-        val supportedDomains = setOf("script", "lock", "cover", "light", "switch")
+        val supportedDomains = setOf("script", "button", "scene", "lock", "cover", "light", "switch")
     }
 }
