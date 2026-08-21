@@ -12,7 +12,7 @@ enum class OnboardingStep {
     COMPLETE,
 }
 
-enum class ActionKind { RUN_SCRIPT, CONTROL_LOCK, CONTROL_COVER, TOGGLE }
+enum class ActionKind { RUN_SCRIPT, PRESS_BUTTON, ACTIVATE_SCENE, CONTROL_LOCK, CONTROL_COVER, TOGGLE }
 
 enum class ActionOutcome { SENDING, REQUESTED, COMPLETED, FAILED, UNKNOWN }
 
@@ -27,6 +27,16 @@ data class QuickAccessAction(
     val order: Long = 0,
     val displayName: String? = null,
 )
+
+data class ActionIdentity(val entityId: String, val kind: ActionKind)
+
+fun QuickAccessAction.identity() = ActionIdentity(entityId, kind)
+
+fun hasActionIdentity(
+    actions: Collection<QuickAccessAction>,
+    entityId: String,
+    kind: ActionKind,
+) = ActionIdentity(entityId, kind) in actions.map(QuickAccessAction::identity)
 
 data class ResolvedAction(
     val action: QuickAccessAction,
@@ -70,6 +80,8 @@ fun OnboardingStep.allowsActionManagement() = this == OnboardingStep.FIRST_ACTIO
 fun EntitySnapshot.availableActionKinds(): List<ActionKind> =
     when (domain) {
         "script" -> listOf(ActionKind.RUN_SCRIPT)
+        "button" -> listOf(ActionKind.PRESS_BUTTON)
+        "scene" -> listOf(ActionKind.ACTIVATE_SCENE)
         "lock" -> listOf(ActionKind.CONTROL_LOCK)
         "cover" -> if (supportedFeatures and COVER_DIRECTIONAL_FEATURES != 0) listOf(ActionKind.CONTROL_COVER) else emptyList()
         "light", "switch" -> listOf(ActionKind.TOGGLE)
@@ -79,6 +91,8 @@ fun EntitySnapshot.availableActionKinds(): List<ActionKind> =
 fun QuickAccessAction.resolve(entity: EntitySnapshot?): ResolvedAction? =
     when (kind) {
         ActionKind.RUN_SCRIPT -> ResolvedAction(this, "turn_on", "Run")
+        ActionKind.PRESS_BUTTON -> ResolvedAction(this, "press", "Press")
+        ActionKind.ACTIVATE_SCENE -> ResolvedAction(this, "turn_on", "Activate")
         ActionKind.TOGGLE ->
             ResolvedAction(
                 action = this,
@@ -95,6 +109,8 @@ fun QuickAccessAction.label(entity: EntitySnapshot? = null): String {
     val operation =
         when (kind) {
             ActionKind.RUN_SCRIPT -> "Run"
+            ActionKind.PRESS_BUTTON -> "Press"
+            ActionKind.ACTIVATE_SCENE -> "Activate"
             ActionKind.TOGGLE -> "Toggle"
             ActionKind.CONTROL_LOCK, ActionKind.CONTROL_COVER -> null
         }
@@ -142,6 +158,8 @@ fun QuickAccessAction.actionHint(entity: EntitySnapshot?): String {
         else -> "Action unavailable"
     }
 }
+
+fun ActionKind.isStatelessControl() = this in setOf(ActionKind.RUN_SCRIPT, ActionKind.PRESS_BUTTON, ActionKind.ACTIVATE_SCENE)
 
 private fun QuickAccessAction.resolveLock(entity: EntitySnapshot?): ResolvedAction? {
     if (entity == null || entity.domain != "lock" || !entity.available) return null

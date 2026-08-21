@@ -1,0 +1,86 @@
+package com.karoohass.network
+
+import com.karoohass.core.ActionKind
+import com.karoohass.core.ActionOutcome
+import com.karoohass.core.QuickAccessAction
+import com.karoohass.core.resolve
+import com.karoohass.security.Tokens
+import kotlinx.coroutines.runBlocking
+import org.junit.Assert.assertEquals
+import org.junit.Assert.assertTrue
+import org.junit.Test
+
+class HomeAssistantRepositoryTest {
+    @Test
+    fun `button press uses the standard service and entity only payload`() =
+        runBlocking {
+            val transport = RecordingTransport(HttpResponse(200, emptyMap(), "[]".toByteArray()))
+            val result = repository(transport).execute(resolved(ActionKind.PRESS_BUTTON, "button.garage_remote"))
+
+            assertEquals(ActionOutcome.REQUESTED, result)
+            assertEquals("POST", transport.requests.single().method)
+            assertTrue(transport.requests.single().url.endsWith("/api/services/button/press"))
+            assertEquals("{\"entity_id\":\"button.garage_remote\"}", String(transport.requests.single().body!!))
+        }
+
+    @Test
+    fun `scene activation uses the standard service`() =
+        runBlocking {
+            val transport = RecordingTransport(HttpResponse(200, emptyMap(), "[]".toByteArray()))
+
+            assertEquals(
+                ActionOutcome.REQUESTED,
+                repository(transport).execute(resolved(ActionKind.ACTIVATE_SCENE, "scene.arrive_home")),
+            )
+            assertTrue(transport.requests.single().url.endsWith("/api/services/scene/turn_on"))
+        }
+
+    @Test
+    fun `rejection is failed while malformed and transport responses are uncertain`() =
+        runBlocking {
+            assertEquals(ActionOutcome.FAILED, execute(HttpResponse(403, emptyMap(), "no".toByteArray())))
+            assertEquals(ActionOutcome.UNKNOWN, execute(HttpResponse(200, emptyMap(), "{}".toByteArray())))
+            assertEquals(ActionOutcome.UNKNOWN, execute(HttpResponse(200, emptyMap(), null)))
+        }
+
+    @Test
+    fun `401 refreshes credentials without replaying service post`() =
+        runBlocking {
+            val transport = RecordingTransport(HttpResponse(401, emptyMap(), "[]".toByteArray()))
+            var refreshed = false
+            val repo =
+                HomeAssistantRepository(
+                    { "https://home.example" },
+                    transport,
+                    { Tokens("token", null, 0) },
+                ) {
+                    refreshed = true
+                    true
+                }
+
+            assertEquals(ActionOutcome.FAILED, repo.execute(resolved(ActionKind.PRESS_BUTTON, "button.test")))
+            assertTrue(refreshed)
+            assertEquals(1, transport.requests.size)
+        }
+
+    private fun repository(transport: HttpTransport) =
+        HomeAssistantRepository({ "https://home.example" }, transport, { Tokens("token", null, 0) }) { false }
+
+    private suspend fun execute(response: HttpResponse) =
+        repository(RecordingTransport(response)).execute(resolved(ActionKind.PRESS_BUTTON, "button.test"))
+
+    private fun resolved(
+        kind: ActionKind,
+        entityId: String,
+    ) =
+        QuickAccessAction("id", entityId, entityId.substringBefore('.'), kind).resolve(null)!!
+
+    private class RecordingTransport(private val response: HttpResponse) : HttpTransport {
+        val requests = mutableListOf<HttpRequest>()
+
+        override suspend fun execute(request: HttpRequest): HttpResponse {
+            requests += request
+            return response
+        }
+    }
+}

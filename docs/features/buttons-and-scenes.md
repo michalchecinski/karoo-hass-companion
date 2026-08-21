@@ -1,5 +1,9 @@
 # Buttons and scenes
 
+> **Implementation status (2026-08-21):** Implemented in Quick Access. Buttons
+> invoke `button.press` and scenes invoke `scene.turn_on` as stateless,
+> deliberate controls.
+
 ## Goal
 
 Allow riders to add Home Assistant button and scene entities to Quick Access as deliberate one-tap controls.

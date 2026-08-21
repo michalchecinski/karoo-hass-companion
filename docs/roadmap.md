@@ -1,9 +1,5 @@
 # Roadmap
 
-## [Buttons and scenes](features/buttons-and-scenes.md)
-
-Add Home Assistant button and scene entities as deliberate one-tap Quick Access controls.
-
 ## [Cover position (reporting and setting)](features/cover-position.md)
 
 Show a cover's reported position and let the rider request a specific position without replacing the existing open, close, and stop controls.
