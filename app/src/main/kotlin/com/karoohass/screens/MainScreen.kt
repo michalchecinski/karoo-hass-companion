@@ -77,6 +77,8 @@ import com.karoohass.core.QuickAccessAction
 import com.karoohass.core.actionHint
 import com.karoohass.core.availableActionKinds
 import com.karoohass.core.displayState
+import com.karoohass.core.hasActionIdentity
+import com.karoohass.core.isStatelessControl
 import com.karoohass.core.label
 
 private val BackControlSize = 54.dp
@@ -194,7 +196,7 @@ fun MainScreen(
                         maxLines = 3,
                         overflow = TextOverflow.Ellipsis,
                     )
-                    if (action.kind != ActionKind.RUN_SCRIPT) {
+                    if (!action.kind.isStatelessControl()) {
                         Text(
                             when {
                                 entity == null && state.busy -> "Loading…"
@@ -252,6 +254,8 @@ private fun HomeAssistantIcon(
         when {
             icon?.contains("light", ignoreCase = true) == true || icon?.contains("bulb", ignoreCase = true) == true || domain == "light" -> R.drawable.ic_ha_light
             icon?.contains("script", ignoreCase = true) == true || domain == "script" -> R.drawable.ic_ha_script
+            icon?.contains("button", ignoreCase = true) == true || domain == "button" -> R.drawable.ic_ha_button
+            icon?.contains("scene", ignoreCase = true) == true || domain == "scene" -> R.drawable.ic_ha_scene
             icon?.contains("lock", ignoreCase = true) == true || domain == "lock" -> R.drawable.ic_ha_lock
             icon?.contains("cover", ignoreCase = true) == true || icon?.contains("garage", ignoreCase = true) == true || domain == "cover" -> R.drawable.ic_ha_cover
             icon?.contains("switch", ignoreCase = true) == true || domain == "switch" -> R.drawable.ic_ha_switch
@@ -702,7 +706,7 @@ private fun openOAuthCallback(
         ActionPicker(entity, protect, confirm, { protect = it }, { confirm = it }, { kind ->
             model.add(entity, kind, protect, confirm)
             selected = null
-        }, { selected = null })
+        }, entity.availableActionKinds().any { kind -> hasActionIdentity(state.settings.actions, entity.entityId, kind) }, { selected = null })
     }
 }
 
@@ -714,6 +718,7 @@ private fun ActionPicker(
     setProtect: (Boolean) -> Unit,
     setConfirmation: (Boolean) -> Unit,
     add: (ActionKind) -> Unit,
+    alreadyAdded: Boolean,
     dismiss: () -> Unit,
 ) {
     val kinds = entity.availableActionKinds()
@@ -727,6 +732,8 @@ private fun ActionPicker(
                     when {
                         kinds.isEmpty() -> "This entity reports no supported Quick Access actions."
                         singleKind == ActionKind.TOGGLE -> "Add a toggle action."
+                        singleKind == ActionKind.PRESS_BUTTON -> "Add a button press."
+                        singleKind == ActionKind.ACTIVATE_SCENE -> "Add a scene activation."
                         singleKind == ActionKind.CONTROL_LOCK -> "Add a state-aware lock control."
                         singleKind == ActionKind.CONTROL_COVER -> "Add a state-aware cover control."
                         else -> "Choose operation"
@@ -744,10 +751,11 @@ private fun ActionPicker(
                     if (singleKind == ActionKind.CONTROL_LOCK) Text("Unlock is always confirmed.", style = MaterialTheme.typography.bodySmall)
                     if (singleKind == ActionKind.CONTROL_COVER) Text("Open is always confirmed.", style = MaterialTheme.typography.bodySmall)
                 }
+                if (alreadyAdded) Text("Already added", color = MaterialTheme.colorScheme.error)
                 if (singleKind == null) kinds.forEach { kind -> TextButton(onClick = { add(kind) }) { Text(kind.label()) } }
             }
         },
-        confirmButton = { if (singleKind != null) TextButton(onClick = { add(singleKind) }) { Text("Add") } },
+        confirmButton = { if (singleKind != null) TextButton(onClick = { add(singleKind) }, enabled = !alreadyAdded) { Text("Add") } },
         dismissButton = { TextButton(onClick = dismiss) { Text("Cancel") } },
     )
 }
@@ -755,6 +763,8 @@ private fun ActionPicker(
 private fun ActionKind.label() =
     when (this) {
         ActionKind.RUN_SCRIPT -> "Run"
+        ActionKind.PRESS_BUTTON -> "Press"
+        ActionKind.ACTIVATE_SCENE -> "Activate"
         ActionKind.CONTROL_LOCK -> "Control lock"
         ActionKind.CONTROL_COVER -> "Control cover"
         ActionKind.TOGGLE -> "Toggle"
