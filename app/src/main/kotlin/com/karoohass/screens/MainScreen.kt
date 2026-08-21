@@ -744,11 +744,11 @@ internal fun ActionPicker(
                 )
                 if (kinds.isNotEmpty()) {
                     Row(verticalAlignment = Alignment.CenterVertically) {
-                        Checkbox(protect, setProtect)
+                        Checkbox(protect, setProtect, modifier = Modifier.testTag("action-picker-protect"))
                         Text("Require PIN")
                     }
                     Row(verticalAlignment = Alignment.CenterVertically) {
-                        Checkbox(confirmation, setConfirmation)
+                        Checkbox(confirmation, setConfirmation, modifier = Modifier.testTag("action-picker-confirm"))
                         Text("Confirm action")
                     }
                     if (singleKind == ActionKind.CONTROL_LOCK) Text("Unlock is always confirmed.", style = MaterialTheme.typography.bodySmall)

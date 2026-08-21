@@ -11,6 +11,7 @@ import androidx.compose.ui.test.junit4.createAndroidComposeRule
 import androidx.compose.ui.test.onAllNodesWithText
 import androidx.compose.ui.test.onNodeWithTag
 import androidx.compose.ui.test.onNodeWithText
+import androidx.compose.ui.test.performClick
 import com.karoohass.UiState
 import com.karoohass.core.ActionKind
 import com.karoohass.core.ActionOutcome
@@ -20,6 +21,7 @@ import com.karoohass.core.OnboardingStep
 import com.karoohass.core.QuickAccessAction
 import com.karoohass.theme.AppTheme
 import org.junit.Assert.assertEquals
+import org.junit.Assert.assertTrue
 import org.junit.Rule
 import org.junit.Test
 
@@ -48,6 +50,9 @@ class QuickAccessControlsTest {
         composeRule.onAllNodesWithText("button-reported-state").assertCountEquals(0)
         composeRule.onAllNodesWithText("scene-reported-state").assertCountEquals(0)
         composeRule.onNodeWithText("Requested").assertTextContains("Requested")
+
+        composeRule.runOnUiThread { state = state.copy(outcome = ActionOutcome.FAILED, outcomeActionId = scene.id) }
+        composeRule.onNodeWithText("Failed").assertTextContains("Failed")
 
         composeRule.runOnUiThread { state = state.copy(outcome = ActionOutcome.UNKNOWN, outcomeActionId = button.id) }
         composeRule.onNodeWithText("Outcome uncertain").assertTextContains("Outcome uncertain")
@@ -85,6 +90,30 @@ class QuickAccessControlsTest {
         composeRule.onNodeWithText("Already added").assertTextContains("Already added")
         composeRule.onAllNodesWithText("Add").assertCountEquals(1)
         composeRule.onNodeWithTag("action-picker-add").assertIsNotEnabled()
+    }
+
+    @Test
+    fun scenePickerOffersOneAddAndBothOptionalSecurityControls() {
+        val scene = snapshot("scene.arrive_home", "scene", "unknown", friendlyName = "Arrive home")
+        var protect by mutableStateOf(false)
+        var confirm by mutableStateOf(false)
+        var added: ActionKind? = null
+        composeRule.setContent {
+            AppTheme {
+                ActionPicker(scene, protect, confirm, { protect = it }, { confirm = it }, { added = it }, alreadyAdded = false, dismiss = {})
+            }
+        }
+
+        composeRule.onNodeWithText("Add a scene activation.").assertTextContains("Add a scene activation.")
+        composeRule.onAllNodesWithText("Add").assertCountEquals(1)
+        composeRule.onNodeWithTag("action-picker-protect").performClick()
+        composeRule.onNodeWithTag("action-picker-confirm").performClick()
+        composeRule.runOnIdle {
+            assertTrue(protect)
+            assertTrue(confirm)
+        }
+        composeRule.onNodeWithTag("action-picker-add").performClick()
+        composeRule.runOnIdle { assertEquals(ActionKind.ACTIVATE_SCENE, added) }
     }
 
     private fun homeState(

@@ -142,6 +142,13 @@ class ActionSemanticsTest {
         assertEquals("Activate Test entity", scene.label())
     }
 
+    @Test fun `button and scene use only optional confirmation`() {
+        mapOf(ActionKind.PRESS_BUTTON to "button.test", ActionKind.ACTIVATE_SCENE to "scene.test").forEach { (kind, entityId) ->
+            assertFalse(action(kind, entityId).resolve(null)!!.requiresConfirmation)
+            assertTrue(action(kind, entityId, confirm = true).resolve(null)!!.requiresConfirmation)
+        }
+    }
+
     @Test fun `duplicate identity includes entity and action kind`() {
         val actions = listOf(action(ActionKind.PRESS_BUTTON, "button.garage_remote"))
 
