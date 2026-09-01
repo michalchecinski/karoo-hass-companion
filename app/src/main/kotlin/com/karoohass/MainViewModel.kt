@@ -31,7 +31,6 @@ import com.karoohass.security.PinStore
 import com.karoohass.security.TokenStore
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.Dispatchers
-import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.StateFlow
@@ -671,7 +670,7 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
             try {
                 // Do not compete with an action or an in-flight initial refresh. The callback is
                 // retained until that work finishes so this reconnect is not lost.
-                while (work.value) delay(100)
+                work.first { !it }
                 val settings = rawSettings.first()
                 if (shouldRefreshQuickAccessAfterWifiReconnect(wasWifiAvailable, isWifiAvailable, settings, wholeAppLocked.value) && wifiAvailable.value) {
                     refreshEntities(silent = true)
