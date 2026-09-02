@@ -40,7 +40,7 @@ class HomeAssistantRepository(
             // The REST API returns an array for accepted service calls. Treat a missing or
             // malformed success body as uncertain rather than claiming that it was accepted.
             val responseBody = response.body ?: return ActionOutcome.UNKNOWN
-            if (runCatching { JSONArray(String(responseBody)) }.isFailure) return ActionOutcome.UNKNOWN
+            if (runCatching { JSONArray(String(responseBody, Charsets.UTF_8)) }.isFailure) return ActionOutcome.UNKNOWN
             if (action.expectedState == null) {
                 ActionOutcome.REQUESTED
             } else {

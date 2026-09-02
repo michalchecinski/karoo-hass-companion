@@ -28,15 +28,11 @@ data class QuickAccessAction(
     val displayName: String? = null,
 )
 
-data class ActionIdentity(val entityId: String, val kind: ActionKind)
-
-fun QuickAccessAction.identity() = ActionIdentity(entityId, kind)
-
 fun hasActionIdentity(
     actions: Collection<QuickAccessAction>,
     entityId: String,
     kind: ActionKind,
-) = ActionIdentity(entityId, kind) in actions.map(QuickAccessAction::identity)
+) = actions.any { it.entityId == entityId && it.kind == kind }
 
 data class ResolvedAction(
     val action: QuickAccessAction,
