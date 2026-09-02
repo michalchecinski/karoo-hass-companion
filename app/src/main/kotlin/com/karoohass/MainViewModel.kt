@@ -214,7 +214,7 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
 
     fun receiveOAuthCallback(uri: Uri) {
         if (!oauth.receive(uri)) {
-            message.value = "Sign-in callback was incomplete. Please try again."
+            oauthCallbackFailed()
             return
         }
         message.value = "Finishing sign-in…"
@@ -242,6 +242,11 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
                 }
             work.value = false
         }
+
+    fun oauthCallbackFailed() {
+        message.value = getApplication<Application>().getString(R.string.oauth_callback_incomplete)
+        screen.value = Screen.SETUP
+    }
 
     fun savePolicy(policy: ConnectionPolicy) = viewModelScope.launch { settingsStore.update { it.copy(connectionPolicy = policy) } }
 

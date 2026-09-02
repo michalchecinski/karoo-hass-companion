@@ -18,8 +18,9 @@ useful record of the intended scope but does not capture all later UX changes.
   AES-GCM storage.
 - Home Assistant API traffic is never routed through a project-operated server.
   The GitHub Pages site carries the OAuth client metadata required by Home
-  Assistant's native-app flow. Its legacy HTTPS callback remains available only
-  for previously released app versions.
+  Assistant's native-app flow. Both the direct deep link and the legacy HTTPS
+  callback are advertised so previously released app versions can still sign
+  in.
 - Fresh installations continue from OAuth through guided connection-policy and
   PIN-mode choices. Neither choice is preselected, and both must be saved
   before the entity chooser becomes available. Setup finishes after the first

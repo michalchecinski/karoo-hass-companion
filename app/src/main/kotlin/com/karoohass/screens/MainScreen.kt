@@ -55,6 +55,7 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.res.painterResource
+import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.input.ImeAction
 import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.text.input.PasswordVisualTransformation
@@ -290,14 +291,14 @@ private fun HomeAssistantIcon(
         item {
             Text("Set up Home Assistant", style = MaterialTheme.typography.titleMedium)
             Text(
-                "Enter a trusted, externally reachable HTTPS address.",
+                stringResource(R.string.setup_origin_help),
                 style = MaterialTheme.typography.bodySmall,
             )
         }
         item {
             ElevatedCard(Modifier.fillMaxWidth()) {
                 Text(
-                    "Privacy: This app connects directly to your Home Assistant. The sign-in webpage only identifies the app; it never proxies traffic.",
+                    stringResource(R.string.setup_privacy_notice),
                     modifier = Modifier.padding(12.dp),
                     style = MaterialTheme.typography.bodySmall,
                 )
@@ -306,7 +307,7 @@ private fun HomeAssistantIcon(
         item { OutlinedTextField(url, { url = it }, label = { Text("Home Assistant URL") }, singleLine = true) }
         item {
             if (state.settings.origin == null || state.settings.onboardingStep == OnboardingStep.CONNECT) {
-                Button(onClick = { error = model.beginAuthentication(url) }) { Text("Continue to Home Assistant") }
+                Button(onClick = { error = model.beginAuthentication(url) }) { Text(stringResource(R.string.continue_to_home_assistant)) }
             } else {
                 Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
                     Text("Connected to ${state.settings.origin}", color = MaterialTheme.colorScheme.primary)

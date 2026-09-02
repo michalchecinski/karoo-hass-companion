@@ -97,19 +97,24 @@ class OAuthManager(private val context: Context, private val tokenStore: TokenSt
 }
 
 class OAuthCallbackActivity : ComponentActivity() {
+    companion object {
+        const val EXTRA_CALLBACK_ERROR = "com.karoohass.extra.OAUTH_CALLBACK_ERROR"
+    }
+
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         val callback =
             intent.data?.takeIf {
                 isOAuthCallbackUri(it.scheme, it.host, it.path)
-            } ?: run {
-                finish()
-                return
             }
-        OAuthManager(applicationContext, TokenStore(applicationContext)).receive(
-            callback,
+        val accepted =
+            callback != null &&
+                OAuthManager(applicationContext, TokenStore(applicationContext)).receive(callback)
+        startActivity(
+            Intent(this, com.karoohass.MainActivity::class.java)
+                .putExtra(EXTRA_CALLBACK_ERROR, !accepted)
+                .addFlags(Intent.FLAG_ACTIVITY_CLEAR_TOP or Intent.FLAG_ACTIVITY_SINGLE_TOP),
         )
-        startActivity(Intent(this, com.karoohass.MainActivity::class.java).addFlags(Intent.FLAG_ACTIVITY_CLEAR_TOP or Intent.FLAG_ACTIVITY_SINGLE_TOP))
         finish()
     }
 }
