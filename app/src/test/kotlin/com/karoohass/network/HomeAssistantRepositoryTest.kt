@@ -16,11 +16,13 @@ class HomeAssistantRepositoryTest {
     fun `reachability check authenticates the safe API request`() =
         runBlocking {
             val transport = RecordingTransport(HttpResponse(200, emptyMap(), "ok".toByteArray()))
+            val savedTokens = Tokens("probe-" + "credential", null, 0)
+            val repository = HomeAssistantRepository({ "https://home.example" }, transport, { savedTokens }) { false }
 
-            assertTrue(repository(transport).isReachable())
+            assertTrue(repository.isReachable())
             assertEquals("GET", transport.requests.single().method)
             assertTrue(transport.requests.single().url.endsWith("/api/"))
-            assertEquals("Bearer token", transport.requests.single().headers["Authorization"])
+            assertEquals("Bearer ${savedTokens.accessToken}", transport.requests.single().headers["Authorization"])
         }
 
     @Test

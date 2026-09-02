@@ -227,8 +227,8 @@ internal fun Home(
                         if (!action.kind.isStatelessControl()) {
                             Text(
                                 when {
-                                    entity == null && state.busy -> "Loading…"
-                                    entity == null -> "State unavailable"
+                                    entity == null && state.busy -> stringResource(R.string.quick_access_loading)
+                                    entity == null -> stringResource(R.string.quick_access_state_unavailable)
                                     else -> entity.displayState()
                                 },
                                 modifier = Modifier.fillMaxWidth(),
@@ -239,8 +239,8 @@ internal fun Home(
                         if (action.kind in setOf(ActionKind.CONTROL_LOCK, ActionKind.CONTROL_COVER)) {
                             Text(
                                 when {
-                                    actionOutcome != null -> actionOutcome.statusText()
-                                    state.busy && state.outcomeActionId == action.id -> "Checking state…"
+                                    actionOutcome != null -> stringResource(actionOutcome.statusResource())
+                                    state.busy && state.outcomeActionId == action.id -> stringResource(R.string.quick_access_checking_state)
                                     else -> action.actionHint(entity)
                                 },
                                 modifier = Modifier.fillMaxWidth(),
@@ -249,14 +249,14 @@ internal fun Home(
                             )
                         } else if (actionOutcome != null) {
                             Text(
-                                actionOutcome.statusText(),
+                                stringResource(actionOutcome.statusResource()),
                                 modifier = Modifier.fillMaxWidth(),
                                 textAlign = TextAlign.Center,
                                 color = if (actionOutcome in setOf(ActionOutcome.FAILED, ActionOutcome.UNKNOWN)) MaterialTheme.colorScheme.error else MaterialTheme.colorScheme.primary,
                             )
                         }
                         if (action.protected) {
-                            Text("PIN protected", modifier = Modifier.fillMaxWidth(), textAlign = TextAlign.Center, style = MaterialTheme.typography.labelSmall)
+                            Text(stringResource(R.string.quick_access_pin_protected), modifier = Modifier.fillMaxWidth(), textAlign = TextAlign.Center, style = MaterialTheme.typography.labelSmall)
                         }
                     }
                 }
@@ -265,13 +265,14 @@ internal fun Home(
     }
 }
 
-private fun ActionOutcome.statusText() =
+@StringRes
+private fun ActionOutcome.statusResource() =
     when (this) {
-        ActionOutcome.SENDING -> "Sending…"
-        ActionOutcome.REQUESTED -> "Requested"
-        ActionOutcome.COMPLETED -> "Completed"
-        ActionOutcome.FAILED -> "Failed"
-        ActionOutcome.UNKNOWN -> "Outcome uncertain"
+        ActionOutcome.SENDING -> R.string.quick_access_sending
+        ActionOutcome.REQUESTED -> R.string.quick_access_requested
+        ActionOutcome.COMPLETED -> R.string.quick_access_completed
+        ActionOutcome.FAILED -> R.string.quick_access_failed
+        ActionOutcome.UNKNOWN -> R.string.quick_access_outcome_uncertain
     }
 
 @Composable
