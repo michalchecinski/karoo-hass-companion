@@ -9,7 +9,8 @@ callback route.
 ## Behavior
 
 - The setup screen explains that Home Assistant traffic goes directly between
-  the Karoo and the configured Home Assistant address.
+  the Karoo and the configured Home Assistant address, and that the webpage
+  used during sign-in identifies the app without proxying traffic.
 - GitHub Pages remains the public OAuth client identity required by Home
   Assistant, but its client metadata approves the app's
   `karoohass://auth-callback` redirect URI.

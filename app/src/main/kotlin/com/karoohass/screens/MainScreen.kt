@@ -297,7 +297,7 @@ private fun HomeAssistantIcon(
         item {
             ElevatedCard(Modifier.fillMaxWidth()) {
                 Text(
-                    "Privacy: This app connects directly to your Home Assistant. GitHub Pages only identifies the app; it never proxies your traffic.",
+                    "Privacy: This app connects directly to your Home Assistant. The sign-in webpage only identifies the app; it never proxies traffic.",
                     modifier = Modifier.padding(12.dp),
                     style = MaterialTheme.typography.bodySmall,
                 )

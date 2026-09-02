@@ -16,10 +16,10 @@ Karoo Home Assistant Companion is a focused Home Assistant remote for the Hammer
 ## Privacy and sign-in
 
 Home Assistant traffic goes directly between your Karoo and the Home Assistant
-address you configure. The `michalchecinski.github.io` page only identifies
-this app to Home Assistant during sign-in; once approved, Home Assistant
-returns directly to the installed app. The project does not operate a relay or
-proxy for your Home Assistant traffic.
+address you configure. The webpage used during sign-in only identifies the app
+to Home Assistant; once approved, Home Assistant returns directly to the
+installed app. The project does not operate a relay or proxy for your Home
+Assistant traffic.
 
 ### Example use cases
 
