@@ -10,11 +10,16 @@ useful record of the intended scope but does not capture all later UX changes.
   origin and normalizes it before authentication.
 - Authentication uses Home Assistant OAuth in an embedded WebView. It uses the
   GitHub Pages client ID `https://michalchecinski.github.io/karoo-hass-companion/`
-  and HTTPS callback
-  `https://michalchecinski.github.io/karoo-hass-companion/auth-callback`.
+  only to identify the app to Home Assistant; Home Assistant returns the
+  authorization result directly to the app's `karoohass://auth-callback` deep
+  link.
 - The callback is intercepted by the app and the authorization code is
   exchanged over direct Wi-Fi. Tokens are encrypted with Android Keystore
   AES-GCM storage.
+- Home Assistant API traffic is never routed through a project-operated server.
+  The GitHub Pages site carries the OAuth client metadata required by Home
+  Assistant's native-app flow. Its legacy HTTPS callback remains available only
+  for previously released app versions.
 - Fresh installations continue from OAuth through guided connection-policy and
   PIN-mode choices. Neither choice is preselected, and both must be saved
   before the entity chooser becomes available. Setup finishes after the first

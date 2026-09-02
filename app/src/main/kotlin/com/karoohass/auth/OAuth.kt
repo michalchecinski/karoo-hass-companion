@@ -17,6 +17,13 @@ import java.net.URI
 import java.net.URLEncoder
 import java.security.SecureRandom
 
+internal fun isOAuthCallbackUri(
+    scheme: String?,
+    host: String?,
+    path: String?,
+): Boolean =
+    scheme == "karoohass" && host == "auth-callback" && path.isNullOrEmpty()
+
 class OAuthManager(private val context: Context, private val tokenStore: TokenStore) {
     private val prefs = context.getSharedPreferences("oauth", Context.MODE_PRIVATE)
     private val clientId = context.getString(R.string.oauth_client_id)
@@ -92,11 +99,15 @@ class OAuthManager(private val context: Context, private val tokenStore: TokenSt
 class OAuthCallbackActivity : ComponentActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
-        OAuthManager(applicationContext, TokenStore(applicationContext)).receive(
-            intent.data ?: run {
+        val callback =
+            intent.data?.takeIf {
+                isOAuthCallbackUri(it.scheme, it.host, it.path)
+            } ?: run {
                 finish()
                 return
-            },
+            }
+        OAuthManager(applicationContext, TokenStore(applicationContext)).receive(
+            callback,
         )
         startActivity(Intent(this, com.karoohass.MainActivity::class.java).addFlags(Intent.FLAG_ACTIVITY_CLEAR_TOP or Intent.FLAG_ACTIVITY_SINGLE_TOP))
         finish()
