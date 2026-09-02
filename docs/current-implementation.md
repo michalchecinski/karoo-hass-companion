@@ -28,6 +28,13 @@ useful record of the intended scope but does not capture all later UX changes.
   action requests use the selected policy.
 - Direct Wi-Fi responses allow Home Assistant's large state list (up to 2 MB).
   The Karoo Companion fallback remains bounded to 100 KB.
+- When authenticated, unlocked Quick Access opens, the app checks the
+  configured Home Assistant API using the selected transport before enabling
+  controls. A persistent card explains how to recover if it is unreachable:
+  Wi-Fi-only users are told to connect the Karoo to Wi-Fi, while fallback users
+  are also told to check their paired phone, Hammerhead Companion app, and
+  phone internet connection. The card offers a manual retry and clears after a
+  successful check.
 - Signing out or using account reset attempts OAuth revocation, removes tokens,
   actions, settings, PIN data, and cached entity states.
 

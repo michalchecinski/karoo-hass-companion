@@ -23,4 +23,20 @@
     <string name="action_kind_control_lock">Control lock</string>
     <string name="action_kind_control_cover">Control cover</string>
     <string name="action_kind_toggle">Toggle</string>
+    <string name="connection_notice_wifi_unavailable_title">No Wi-Fi connection</string>
+    <string name="connection_notice_wifi_unavailable_message">Connect the Karoo to Wi-Fi, then try again.</string>
+    <string name="connection_notice_unreachable_title">Home Assistant can\'t be reached</string>
+    <string name="connection_notice_wifi_unreachable_message">Check the Karoo\'s Wi-Fi connection and Home Assistant, then try again.</string>
+    <string name="connection_notice_companion_unreachable_message">Connect to Wi-Fi, or check that your phone is paired, Hammerhead Companion is running, and the phone has internet access.</string>
+    <string name="connection_notice_retry">Try again</string>
+    <string name="connection_notice_checking">Checking Home Assistant connection…</string>
+    <string name="quick_access_loading">Loading…</string>
+    <string name="quick_access_state_unavailable">State unavailable</string>
+    <string name="quick_access_checking_state">Checking state…</string>
+    <string name="quick_access_pin_protected">PIN protected</string>
+    <string name="quick_access_sending">Sending…</string>
+    <string name="quick_access_requested">Requested</string>
+    <string name="quick_access_completed">Completed</string>
+    <string name="quick_access_failed">Failed</string>
+    <string name="quick_access_outcome_uncertain">Outcome uncertain</string>
 </resources>

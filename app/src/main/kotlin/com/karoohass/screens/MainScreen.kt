@@ -110,7 +110,7 @@ fun MainScreen(
             when (displayedScreen) {
                 Screen.HOME ->
                     Box(Modifier.padding(top = if (state.settings.origin != null) 48.dp else 0.dp)) {
-                        Home(state, model::invoke, model::openSetup)
+                        Home(state, model::invoke, model::openSetup, model::retryHomeAssistantConnection)
                     }
                 Screen.SETUP -> Setup(state, model)
                 Screen.AUTH -> OAuthWebView(model.currentAuthorizationUrl(), model::receiveOAuthCallback)
@@ -163,6 +163,7 @@ internal fun Home(
     state: UiState,
     invoke: (QuickAccessAction) -> Unit,
     setup: () -> Unit,
+    retryConnection: () -> Unit = {},
 ) {
     if (state.settings.origin == null) {
         Empty("Connect to Home Assistant to add Quick Access controls.", "Set up", setup)
@@ -172,68 +173,91 @@ internal fun Home(
         Empty("No Quick Access actions yet.", "Manage actions", setup)
         return
     }
-    LazyVerticalGrid(
-        GridCells.Fixed(2),
-        contentPadding = PaddingValues(start = 10.dp, top = 10.dp, end = 10.dp, bottom = HomeGridBottomPadding),
-        verticalArrangement = Arrangement.spacedBy(8.dp),
-        horizontalArrangement = Arrangement.spacedBy(8.dp),
-    ) {
-        items(state.settings.actions.size) { index ->
-            val action = state.settings.actions[index]
-            val entity = state.snapshots[action.entityId]
-            val actionOutcome = state.outcome.takeIf { state.outcomeActionId == action.id }
-            ElevatedCard(
-                Modifier
-                    .heightIn(min = 110.dp)
-                    .fillMaxWidth()
-                    .testTag("quick-access-${action.id}")
-                    .clickable(enabled = !state.busy && (entity?.available != false)) { invoke(action) },
+    Column(Modifier.fillMaxSize()) {
+        state.connectionNotice?.let { notice ->
+            ElevatedCard(Modifier.fillMaxWidth().padding(horizontal = 10.dp, vertical = 10.dp)) {
+                Column(Modifier.padding(12.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                    Text(stringResource(notice.titleRes), style = MaterialTheme.typography.titleSmall)
+                    Text(stringResource(notice.messageRes), style = MaterialTheme.typography.bodySmall)
+                    Button(onClick = retryConnection) { Text(stringResource(R.string.connection_notice_retry)) }
+                }
+            }
+        }
+        if (state.connectionStatus == com.karoohass.ConnectionStatus.CHECKING) {
+            Row(
+                Modifier.fillMaxWidth().padding(horizontal = 12.dp, vertical = 8.dp),
+                horizontalArrangement = Arrangement.Center,
+                verticalAlignment = Alignment.CenterVertically,
             ) {
-                Column(Modifier.padding(12.dp), verticalArrangement = Arrangement.SpaceBetween) {
-                    Box(Modifier.fillMaxWidth(), contentAlignment = Alignment.Center) {
-                        HomeAssistantIcon(action.icon ?: entity?.icon, action.domain)
-                    }
-                    Text(
-                        entity?.friendlyName ?: action.displayName ?: action.entityId,
-                        modifier = Modifier.fillMaxWidth(),
-                        style = MaterialTheme.typography.bodySmall,
-                        textAlign = TextAlign.Center,
-                        maxLines = 3,
-                        overflow = TextOverflow.Ellipsis,
-                    )
-                    if (!action.kind.isStatelessControl()) {
+                CircularProgressIndicator(Modifier.size(18.dp), strokeWidth = 2.dp)
+                Spacer(Modifier.width(8.dp))
+                Text(stringResource(R.string.connection_notice_checking), style = MaterialTheme.typography.bodySmall)
+            }
+        }
+        LazyVerticalGrid(
+            GridCells.Fixed(2),
+            modifier = Modifier.weight(1f),
+            contentPadding = PaddingValues(start = 10.dp, top = 10.dp, end = 10.dp, bottom = HomeGridBottomPadding),
+            verticalArrangement = Arrangement.spacedBy(8.dp),
+            horizontalArrangement = Arrangement.spacedBy(8.dp),
+        ) {
+            items(state.settings.actions.size) { index ->
+                val action = state.settings.actions[index]
+                val entity = state.snapshots[action.entityId]
+                val actionOutcome = state.outcome.takeIf { state.outcomeActionId == action.id }
+                ElevatedCard(
+                    Modifier
+                        .heightIn(min = 110.dp)
+                        .fillMaxWidth()
+                        .testTag("quick-access-${action.id}")
+                        .clickable(enabled = state.canInvokeQuickAccessActions && (entity?.available != false)) { invoke(action) },
+                ) {
+                    Column(Modifier.padding(12.dp), verticalArrangement = Arrangement.SpaceBetween) {
+                        Box(Modifier.fillMaxWidth(), contentAlignment = Alignment.Center) {
+                            HomeAssistantIcon(action.icon ?: entity?.icon, action.domain)
+                        }
                         Text(
-                            when {
-                                entity == null && state.busy -> "Loading…"
-                                entity == null -> "State unavailable"
-                                else -> entity.displayState()
-                            },
+                            entity?.friendlyName ?: action.displayName ?: action.entityId,
                             modifier = Modifier.fillMaxWidth(),
+                            style = MaterialTheme.typography.bodySmall,
                             textAlign = TextAlign.Center,
-                            color = if (entity?.available == false) MaterialTheme.colorScheme.error else MaterialTheme.colorScheme.onSurfaceVariant,
+                            maxLines = 3,
+                            overflow = TextOverflow.Ellipsis,
                         )
-                    }
-                    if (action.kind in setOf(ActionKind.CONTROL_LOCK, ActionKind.CONTROL_COVER)) {
-                        Text(
-                            when {
-                                actionOutcome != null -> actionOutcome.statusText()
-                                state.busy && state.outcomeActionId == action.id -> "Checking state…"
-                                else -> action.actionHint(entity)
-                            },
-                            modifier = Modifier.fillMaxWidth(),
-                            textAlign = TextAlign.Center,
-                            color = if (actionOutcome in setOf(ActionOutcome.FAILED, ActionOutcome.UNKNOWN) || entity?.available == false) MaterialTheme.colorScheme.error else MaterialTheme.colorScheme.primary,
-                        )
-                    } else if (actionOutcome != null) {
-                        Text(
-                            actionOutcome.statusText(),
-                            modifier = Modifier.fillMaxWidth(),
-                            textAlign = TextAlign.Center,
-                            color = if (actionOutcome in setOf(ActionOutcome.FAILED, ActionOutcome.UNKNOWN)) MaterialTheme.colorScheme.error else MaterialTheme.colorScheme.primary,
-                        )
-                    }
-                    if (action.protected) {
-                        Text("PIN protected", modifier = Modifier.fillMaxWidth(), textAlign = TextAlign.Center, style = MaterialTheme.typography.labelSmall)
+                        if (!action.kind.isStatelessControl()) {
+                            Text(
+                                when {
+                                    entity == null && state.busy -> stringResource(R.string.quick_access_loading)
+                                    entity == null -> stringResource(R.string.quick_access_state_unavailable)
+                                    else -> entity.displayState()
+                                },
+                                modifier = Modifier.fillMaxWidth(),
+                                textAlign = TextAlign.Center,
+                                color = if (entity?.available == false) MaterialTheme.colorScheme.error else MaterialTheme.colorScheme.onSurfaceVariant,
+                            )
+                        }
+                        if (action.kind in setOf(ActionKind.CONTROL_LOCK, ActionKind.CONTROL_COVER)) {
+                            Text(
+                                when {
+                                    actionOutcome != null -> stringResource(actionOutcome.statusResource())
+                                    state.busy && state.outcomeActionId == action.id -> stringResource(R.string.quick_access_checking_state)
+                                    else -> action.actionHint(entity)
+                                },
+                                modifier = Modifier.fillMaxWidth(),
+                                textAlign = TextAlign.Center,
+                                color = if (actionOutcome in setOf(ActionOutcome.FAILED, ActionOutcome.UNKNOWN) || entity?.available == false) MaterialTheme.colorScheme.error else MaterialTheme.colorScheme.primary,
+                            )
+                        } else if (actionOutcome != null) {
+                            Text(
+                                stringResource(actionOutcome.statusResource()),
+                                modifier = Modifier.fillMaxWidth(),
+                                textAlign = TextAlign.Center,
+                                color = if (actionOutcome in setOf(ActionOutcome.FAILED, ActionOutcome.UNKNOWN)) MaterialTheme.colorScheme.error else MaterialTheme.colorScheme.primary,
+                            )
+                        }
+                        if (action.protected) {
+                            Text(stringResource(R.string.quick_access_pin_protected), modifier = Modifier.fillMaxWidth(), textAlign = TextAlign.Center, style = MaterialTheme.typography.labelSmall)
+                        }
                     }
                 }
             }
@@ -241,13 +265,14 @@ internal fun Home(
     }
 }
 
-private fun ActionOutcome.statusText() =
+@StringRes
+private fun ActionOutcome.statusResource() =
     when (this) {
-        ActionOutcome.SENDING -> "Sending…"
-        ActionOutcome.REQUESTED -> "Requested"
-        ActionOutcome.COMPLETED -> "Completed"
-        ActionOutcome.FAILED -> "Failed"
-        ActionOutcome.UNKNOWN -> "Outcome uncertain"
+        ActionOutcome.SENDING -> R.string.quick_access_sending
+        ActionOutcome.REQUESTED -> R.string.quick_access_requested
+        ActionOutcome.COMPLETED -> R.string.quick_access_completed
+        ActionOutcome.FAILED -> R.string.quick_access_failed
+        ActionOutcome.UNKNOWN -> R.string.quick_access_outcome_uncertain
     }
 
 @Composable
