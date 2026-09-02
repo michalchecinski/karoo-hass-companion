@@ -22,6 +22,7 @@ import com.karoohass.core.ResolvedAction
 import com.karoohass.core.SettingsStore
 import com.karoohass.core.actionHint
 import com.karoohass.core.allowsActionManagement
+import com.karoohass.core.hasActionIdentity
 import com.karoohass.core.resolve
 import com.karoohass.network.DirectWifiTransport
 import com.karoohass.network.HomeAssistantRepository
@@ -122,8 +123,8 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
             }
         }
     private val policyTransport = PolicyTransport({ state.value.settings.connectionPolicy }, directTransport, KarooTransport(application))
-    private val repository = HomeAssistantRepository({ state.value.settings.origin }, policyTransport, tokens) { oauth.refresh(policyTransport) }
-    private val wifiRepository = HomeAssistantRepository({ state.value.settings.origin }, directTransport, tokens) { oauth.refresh(directTransport) }
+    private val repository = HomeAssistantRepository({ state.value.settings.origin }, policyTransport, tokens::load) { oauth.refresh(policyTransport) }
+    private val wifiRepository = HomeAssistantRepository({ state.value.settings.origin }, directTransport, tokens::load) { oauth.refresh(directTransport) }
     val state: StateFlow<UiState> =
         combine(
             combine(rawSettings, screen) { settings, current -> settings to current },
@@ -376,7 +377,7 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
             val found = wifiRepository.discover()
             val byId = found.associateBy { it.entityId }
             snapshots.value = byId
-            settingsStore.update { old -> old.copy(actions = old.actions.map { action -> byId[action.entityId]?.let { entity -> action.copy(displayName = entity.friendlyName, icon = entity.icon ?: action.icon) } ?: action }) }
+            settingsStore.update { old -> old.copy(actions = old.actions.map { action -> byId[action.entityId]?.let { entity -> action.copy(displayName = entity.friendlyName, icon = entity.icon) } ?: action }) }
             entityDiscoveryStatus.value = EntityDiscoveryStatus.SUCCEEDED
         } catch (error: CancellationException) {
             throw error
@@ -399,7 +400,7 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
         viewModelScope.launch {
             var completedOnboarding = false
             settingsStore.update { old ->
-                if (old.actions.any { it.entityId == entity.entityId && it.kind == kind }) {
+                if (hasActionIdentity(old.actions, entity.entityId, kind)) {
                     old
                 } else {
                     val action =
@@ -473,6 +474,11 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
                     message.value = "Action unavailable: state could not be refreshed"
                     return@launch
                 }
+            }
+            if (snapshot?.available == false) {
+                work.value = false
+                message.value = getApplication<Application>().getString(R.string.action_unavailable)
+                return@launch
             }
             if (intentGeneration != actionIntentGeneration) {
                 work.value = false

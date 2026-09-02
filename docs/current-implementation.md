@@ -38,10 +38,13 @@ useful record of the intended scope but does not capture all later UX changes.
   until a fresh entity response is available. Long names can use up to three
   lines before ellipsizing.
 - Tiles use small bundled icons selected from the Home Assistant icon/domain:
-  light, script, lock, cover, switch, or a generic entity fallback. The same
-  icon treatment is used in the entity chooser and configured-action list.
-- Scripts show only their name and icon; they do not show a state or an extra
-  “Run script” label.
+  light, script, button, scene, lock, cover, switch, or a generic entity
+  fallback. The same icon treatment is used in the entity chooser and
+  configured-action list.
+- Scripts, buttons, and scenes show only their name and icon; they do not show
+  a state or an additional action label. Buttons invoke `button.press` and
+  scenes invoke `scene.turn_on`; both report a successful request as
+  **Requested**, without claiming completion.
 - Lights and switches are represented as one **Toggle** action rather than
   separate turn-on and turn-off actions.
 - Locks and covers are added as one state-aware control per entity rather than
@@ -61,8 +64,9 @@ useful record of the intended scope but does not capture all later UX changes.
 - Lock and cover controls refresh their state immediately before resolving an
   operation, then poll Home Assistant after execution to update the visible
   state. Cover Stop performs a best-effort state refresh without claiming
-  physical completion. Toggle actions wait for a changed state. Scripts
-  deliberately do not display state.
+  physical completion. Toggle actions wait for a changed state. Stateless
+  scripts, buttons, and scenes deliberately do not display state or request a
+  pre-action refresh.
 - Configured actions store the Home Assistant friendly name and icon and are
   refreshed when discovery finds a newer entity definition.
 
@@ -78,10 +82,11 @@ useful record of the intended scope but does not capture all later UX changes.
   failure is shown on its own and is not presented as a successful empty
   result.
 - Selecting an entity opens an action picker. Locks, covers, lights, switches,
-  and scripts each have one Add action; users do not choose separate lock or
-  cover operations. Existing configured actions can be removed or reordered
-  from the management screen. After adding a control, users remain on that
-  screen to add more; its **Done** button returns to Quick Access.
+  scripts, buttons, and scenes each have one Add action; users do not choose
+  separate lock or cover operations. Existing configured actions can be
+  removed or reordered from the management screen. After adding a control,
+  users remain on that screen to add more; its **Done** button returns to Quick
+  Access.
 
 ## PIN protection
 
