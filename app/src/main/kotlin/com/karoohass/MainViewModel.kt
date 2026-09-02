@@ -116,6 +116,18 @@ internal fun canCheckQuickAccessConnection(
         screen == Screen.HOME &&
         (settings.pinMode != PinMode.WHOLE_APP || !wholeAppLocked)
 
+internal fun shouldRefreshQuickAccessAfterWifiReconnect(
+    wasWifiAvailable: Boolean,
+    wifiAvailable: Boolean,
+    settings: AppSettings,
+    wholeAppLocked: Boolean,
+): Boolean =
+    !wasWifiAvailable &&
+        wifiAvailable &&
+        settings.origin != null &&
+        settings.actions.isNotEmpty() &&
+        !wholeAppLocked
+
 class MainViewModel(application: Application) : AndroidViewModel(application) {
     private val settingsStore = SettingsStore(application)
     private val tokens = TokenStore(application)
@@ -140,17 +152,24 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
     private val wifiAvailable = MutableStateFlow(directTransport.isAvailable())
     private val connectionStatus = MutableStateFlow(ConnectionStatus.NOT_CHECKED)
     private val entityDiscoveryStatus = MutableStateFlow(EntityDiscoveryStatus.NOT_STARTED)
+    private var reconnectRefreshScheduled = false
     private val connectivityManager = application.getSystemService(ConnectivityManager::class.java)
     private val connectivityCallback =
         object : ConnectivityManager.NetworkCallback() {
-            override fun onAvailable(network: Network) = updateWifiAvailability(recheckConnection = true)
+            override fun onAvailable(network: Network) {
+                viewModelScope.launch { updateWifiAvailability(recheckConnection = true) }
+            }
 
-            override fun onLost(network: Network) = updateWifiAvailability(recheckConnection = true)
+            override fun onLost(network: Network) {
+                viewModelScope.launch { updateWifiAvailability(recheckConnection = true) }
+            }
 
             override fun onCapabilitiesChanged(
                 network: Network,
                 networkCapabilities: NetworkCapabilities,
-            ) = updateWifiAvailability(recheckConnection = true)
+            ) {
+                viewModelScope.launch { updateWifiAvailability(recheckConnection = true) }
+            }
         }
     private val policyTransport = PolicyTransport({ state.value.settings.connectionPolicy }, directTransport, KarooTransport(application))
     private val repository = HomeAssistantRepository({ state.value.settings.origin }, policyTransport, tokens) { oauth.refresh(policyTransport) }
@@ -741,8 +760,37 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
     }
 
     private fun updateWifiAvailability(recheckConnection: Boolean = false) {
-        wifiAvailable.value = directTransport.isAvailable()
+        val wasWifiAvailable = wifiAvailable.value
+        val isWifiAvailable = directTransport.isAvailable()
+        wifiAvailable.value = isWifiAvailable
         if (recheckConnection) checkHomeAssistantConnection(force = true)
+        if (!reconnectRefreshScheduled && !wasWifiAvailable && isWifiAvailable) {
+            scheduleQuickAccessRefreshAfterWifiReconnect(wasWifiAvailable, isWifiAvailable)
+        }
+    }
+
+    /**
+     * A state load may fail while Karoo is starting or is out of range.  Network callbacks only
+     * report the transport change, so explicitly refresh configured controls on reconnection.
+     */
+    private fun scheduleQuickAccessRefreshAfterWifiReconnect(
+        wasWifiAvailable: Boolean,
+        isWifiAvailable: Boolean,
+    ) {
+        reconnectRefreshScheduled = true
+        viewModelScope.launch {
+            try {
+                // Do not compete with an action or an in-flight initial refresh. The callback is
+                // retained until that work finishes so this reconnect is not lost.
+                work.first { !it }
+                val settings = rawSettings.first()
+                if (shouldRefreshQuickAccessAfterWifiReconnect(wasWifiAvailable, isWifiAvailable, settings, wholeAppLocked.value) && wifiAvailable.value) {
+                    refreshEntities(silent = true)
+                }
+            } finally {
+                reconnectRefreshScheduled = false
+            }
+        }
     }
 
     private data class PinUiState(
