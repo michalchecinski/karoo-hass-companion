@@ -66,3 +66,21 @@ them.
   visual asset changes unless they alter runtime behaviour.
 - For each finding, explain the triggering scenario and user impact. Reference
   the smallest relevant changed line range and propose a fix when it is clear.
+
+## Evidence threshold
+
+- Report a finding only when it is directly supported by the changed code and
+  relevant repository context. If you cannot identify a concrete execution path
+  that produces the problem, do not comment.
+- Do not infer defects from redacted, masked, generated, or truncated values in
+  the review UI. Review the source and tests as written.
+- Do not comment merely because a different implementation might be preferable;
+  require a correctness, safety, security, user-impact, or maintainability
+  failure.
+
+## Finding quality
+
+- Do not restate an existing test, implementation, or documented invariant as a
+  concern unless the change demonstrably violates it.
+- When uncertain whether a concern is real, omit it rather than presenting it
+  as a defect.
