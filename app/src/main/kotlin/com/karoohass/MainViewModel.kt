@@ -443,11 +443,6 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
             outcome.value = null
             message.value = null
             var snapshot = snapshots.value[action.entityId]
-            if (snapshot?.available == false) {
-                work.value = false
-                message.value = "Action unavailable"
-                return@launch
-            }
             val mustRefresh = action.kind in setOf(ActionKind.CONTROL_LOCK, ActionKind.CONTROL_COVER)
             val refreshIfStale = action.kind == ActionKind.TOGGLE && (snapshot == null || System.currentTimeMillis() - snapshot.fetchedAt > 60_000)
             if (mustRefresh || refreshIfStale) {
@@ -460,6 +455,11 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
                     message.value = "Action unavailable: state could not be refreshed"
                     return@launch
                 }
+            }
+            if (snapshot?.available == false) {
+                work.value = false
+                message.value = "Action unavailable"
+                return@launch
             }
             if (intentGeneration != actionIntentGeneration) {
                 work.value = false
