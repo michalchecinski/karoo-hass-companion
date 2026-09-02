@@ -13,6 +13,12 @@ class HomeAssistantRepository(
     private val tokens: TokenStore,
     private val refresh: suspend () -> Boolean,
 ) {
+    /** Safely verifies that the configured Home Assistant API can be reached. */
+    suspend fun isReachable(): Boolean {
+        val response = request("GET", "/api/")
+        return response.error == null && response.code in 200..299
+    }
+
     suspend fun discover(): List<EntitySnapshot> {
         val response = request("GET", "/api/states")
         response.error?.let { throw TransportException.Failure(it) }

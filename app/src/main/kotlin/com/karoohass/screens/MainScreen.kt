@@ -105,7 +105,7 @@ fun MainScreen(
             when (displayedScreen) {
                 Screen.HOME ->
                     Box(Modifier.padding(top = if (state.settings.origin != null) 48.dp else 0.dp)) {
-                        Home(state, model::invoke, model::openSetup)
+                        Home(state, model::invoke, model::retryHomeAssistantConnection, model::openSetup)
                     }
                 Screen.SETUP -> Setup(state, model)
                 Screen.AUTH -> OAuthWebView(model.currentAuthorizationUrl(), model::receiveOAuthCallback)
@@ -156,6 +156,7 @@ fun MainScreen(
 @Composable private fun Home(
     state: UiState,
     invoke: (QuickAccessAction) -> Unit,
+    retryConnection: () -> Unit,
     setup: () -> Unit,
 ) {
     if (state.settings.origin == null) {
@@ -166,67 +167,90 @@ fun MainScreen(
         Empty("No Quick Access actions yet.", "Manage actions", setup)
         return
     }
-    LazyVerticalGrid(
-        GridCells.Fixed(2),
-        contentPadding = PaddingValues(start = 10.dp, top = 10.dp, end = 10.dp, bottom = HomeGridBottomPadding),
-        verticalArrangement = Arrangement.spacedBy(8.dp),
-        horizontalArrangement = Arrangement.spacedBy(8.dp),
-    ) {
-        items(state.settings.actions.size) { index ->
-            val action = state.settings.actions[index]
-            val entity = state.snapshots[action.entityId]
-            val actionOutcome = state.outcome.takeIf { state.outcomeActionId == action.id }
-            ElevatedCard(
-                Modifier
-                    .heightIn(min = 110.dp)
-                    .fillMaxWidth()
-                    .clickable(enabled = !state.busy && (entity?.available != false)) { invoke(action) },
+    Column(Modifier.fillMaxSize()) {
+        state.connectionNotice?.let { notice ->
+            ElevatedCard(Modifier.fillMaxWidth().padding(horizontal = 10.dp, vertical = 10.dp)) {
+                Column(Modifier.padding(12.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                    Text(notice.title, style = MaterialTheme.typography.titleSmall)
+                    Text(notice.message, style = MaterialTheme.typography.bodySmall)
+                    Button(onClick = retryConnection) { Text("Try again") }
+                }
+            }
+        }
+        if (state.connectionStatus == com.karoohass.ConnectionStatus.CHECKING) {
+            Row(
+                Modifier.fillMaxWidth().padding(horizontal = 12.dp, vertical = 8.dp),
+                horizontalArrangement = Arrangement.Center,
+                verticalAlignment = Alignment.CenterVertically,
             ) {
-                Column(Modifier.padding(12.dp), verticalArrangement = Arrangement.SpaceBetween) {
-                    Box(Modifier.fillMaxWidth(), contentAlignment = Alignment.Center) {
-                        HomeAssistantIcon(action.icon ?: entity?.icon, action.domain)
-                    }
-                    Text(
-                        entity?.friendlyName ?: action.displayName ?: action.entityId,
-                        modifier = Modifier.fillMaxWidth(),
-                        style = MaterialTheme.typography.bodySmall,
-                        textAlign = TextAlign.Center,
-                        maxLines = 3,
-                        overflow = TextOverflow.Ellipsis,
-                    )
-                    if (action.kind != ActionKind.RUN_SCRIPT) {
+                CircularProgressIndicator(Modifier.size(18.dp), strokeWidth = 2.dp)
+                Spacer(Modifier.width(8.dp))
+                Text("Checking Home Assistant connection…", style = MaterialTheme.typography.bodySmall)
+            }
+        }
+        LazyVerticalGrid(
+            GridCells.Fixed(2),
+            modifier = Modifier.weight(1f),
+            contentPadding = PaddingValues(start = 10.dp, top = 10.dp, end = 10.dp, bottom = HomeGridBottomPadding),
+            verticalArrangement = Arrangement.spacedBy(8.dp),
+            horizontalArrangement = Arrangement.spacedBy(8.dp),
+        ) {
+            items(state.settings.actions.size) { index ->
+                val action = state.settings.actions[index]
+                val entity = state.snapshots[action.entityId]
+                val actionOutcome = state.outcome.takeIf { state.outcomeActionId == action.id }
+                ElevatedCard(
+                    Modifier
+                        .heightIn(min = 110.dp)
+                        .fillMaxWidth()
+                        .clickable(enabled = state.canInvokeQuickAccessActions && (entity?.available != false)) { invoke(action) },
+                ) {
+                    Column(Modifier.padding(12.dp), verticalArrangement = Arrangement.SpaceBetween) {
+                        Box(Modifier.fillMaxWidth(), contentAlignment = Alignment.Center) {
+                            HomeAssistantIcon(action.icon ?: entity?.icon, action.domain)
+                        }
                         Text(
-                            when {
-                                entity == null && state.busy -> "Loading…"
-                                entity == null -> "State unavailable"
-                                else -> entity.displayState()
-                            },
+                            entity?.friendlyName ?: action.displayName ?: action.entityId,
                             modifier = Modifier.fillMaxWidth(),
+                            style = MaterialTheme.typography.bodySmall,
                             textAlign = TextAlign.Center,
-                            color = if (entity?.available == false) MaterialTheme.colorScheme.error else MaterialTheme.colorScheme.onSurfaceVariant,
+                            maxLines = 3,
+                            overflow = TextOverflow.Ellipsis,
                         )
-                    }
-                    if (action.kind in setOf(ActionKind.CONTROL_LOCK, ActionKind.CONTROL_COVER)) {
-                        Text(
-                            when {
-                                actionOutcome != null -> actionOutcome.statusText()
-                                state.busy && state.outcomeActionId == action.id -> "Checking state…"
-                                else -> action.actionHint(entity)
-                            },
-                            modifier = Modifier.fillMaxWidth(),
-                            textAlign = TextAlign.Center,
-                            color = if (actionOutcome in setOf(ActionOutcome.FAILED, ActionOutcome.UNKNOWN) || entity?.available == false) MaterialTheme.colorScheme.error else MaterialTheme.colorScheme.primary,
-                        )
-                    } else if (actionOutcome != null) {
-                        Text(
-                            actionOutcome.statusText(),
-                            modifier = Modifier.fillMaxWidth(),
-                            textAlign = TextAlign.Center,
-                            color = if (actionOutcome in setOf(ActionOutcome.FAILED, ActionOutcome.UNKNOWN)) MaterialTheme.colorScheme.error else MaterialTheme.colorScheme.primary,
-                        )
-                    }
-                    if (action.protected) {
-                        Text("PIN protected", modifier = Modifier.fillMaxWidth(), textAlign = TextAlign.Center, style = MaterialTheme.typography.labelSmall)
+                        if (action.kind != ActionKind.RUN_SCRIPT) {
+                            Text(
+                                when {
+                                    entity == null && state.busy -> "Loading…"
+                                    entity == null -> "State unavailable"
+                                    else -> entity.displayState()
+                                },
+                                modifier = Modifier.fillMaxWidth(),
+                                textAlign = TextAlign.Center,
+                                color = if (entity?.available == false) MaterialTheme.colorScheme.error else MaterialTheme.colorScheme.onSurfaceVariant,
+                            )
+                        }
+                        if (action.kind in setOf(ActionKind.CONTROL_LOCK, ActionKind.CONTROL_COVER)) {
+                            Text(
+                                when {
+                                    actionOutcome != null -> actionOutcome.statusText()
+                                    state.busy && state.outcomeActionId == action.id -> "Checking state…"
+                                    else -> action.actionHint(entity)
+                                },
+                                modifier = Modifier.fillMaxWidth(),
+                                textAlign = TextAlign.Center,
+                                color = if (actionOutcome in setOf(ActionOutcome.FAILED, ActionOutcome.UNKNOWN) || entity?.available == false) MaterialTheme.colorScheme.error else MaterialTheme.colorScheme.primary,
+                            )
+                        } else if (actionOutcome != null) {
+                            Text(
+                                actionOutcome.statusText(),
+                                modifier = Modifier.fillMaxWidth(),
+                                textAlign = TextAlign.Center,
+                                color = if (actionOutcome in setOf(ActionOutcome.FAILED, ActionOutcome.UNKNOWN)) MaterialTheme.colorScheme.error else MaterialTheme.colorScheme.primary,
+                            )
+                        }
+                        if (action.protected) {
+                            Text("PIN protected", modifier = Modifier.fillMaxWidth(), textAlign = TextAlign.Center, style = MaterialTheme.typography.labelSmall)
+                        }
                     }
                 }
             }
