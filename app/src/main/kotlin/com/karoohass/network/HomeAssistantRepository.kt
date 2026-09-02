@@ -92,10 +92,14 @@ class HomeAssistantRepository(
     private fun parseState(item: JSONObject): EntitySnapshot {
         val attributes = item.optJSONObject("attributes") ?: JSONObject()
         val id = item.getString("entity_id")
-        return EntitySnapshot(id, id.substringBefore('.'), item.optString("state"), attributes.optInt("supported_features"), item.optString("state") !in setOf("unknown", "unavailable"), item.optString("last_updated"), attributes.optString("friendly_name", id), attributes.optString("icon").takeIf { it.isNotBlank() })
+        val domain = id.substringBefore('.')
+        val state = item.optString("state")
+        val available = state != "unavailable" && (state != "unknown" || domain in statelessDomains)
+        return EntitySnapshot(id, domain, state, attributes.optInt("supported_features"), available, item.optString("last_updated"), attributes.optString("friendly_name", id), attributes.optString("icon").takeIf { it.isNotBlank() })
     }
 
     companion object {
         val supportedDomains = setOf("script", "button", "scene", "lock", "cover", "light", "switch")
+        private val statelessDomains = setOf("script", "button", "scene")
     }
 }

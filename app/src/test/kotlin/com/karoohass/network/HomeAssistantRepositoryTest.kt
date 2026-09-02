@@ -7,6 +7,7 @@ import com.karoohass.core.resolve
 import com.karoohass.security.Tokens
 import kotlinx.coroutines.runBlocking
 import org.junit.Assert.assertEquals
+import org.junit.Assert.assertFalse
 import org.junit.Assert.assertTrue
 import org.junit.Test
 
@@ -61,6 +62,28 @@ class HomeAssistantRepositoryTest {
             assertEquals(ActionOutcome.FAILED, repo.execute(resolved(ActionKind.PRESS_BUTTON, "button.test")))
             assertTrue(refreshed)
             assertEquals(1, transport.requests.size)
+        }
+
+    @Test
+    fun `stateless entities reporting unknown remain available`() =
+        runBlocking {
+            val states =
+                """
+                [
+                  {"entity_id":"script.prepare_home","state":"unknown","attributes":{}},
+                  {"entity_id":"button.garage_remote","state":"unknown","attributes":{}},
+                  {"entity_id":"scene.arrive_home","state":"unknown","attributes":{}},
+                  {"entity_id":"button.offline","state":"unavailable","attributes":{}},
+                  {"entity_id":"lock.front_door","state":"unknown","attributes":{}}
+                ]
+                """.trimIndent().toByteArray()
+            val entities = repository(RecordingTransport(HttpResponse(200, emptyMap(), states))).discover().associateBy { it.entityId }
+
+            assertTrue(entities.getValue("script.prepare_home").available)
+            assertTrue(entities.getValue("button.garage_remote").available)
+            assertTrue(entities.getValue("scene.arrive_home").available)
+            assertFalse(entities.getValue("button.offline").available)
+            assertFalse(entities.getValue("lock.front_door").available)
         }
 
     private fun repository(transport: HttpTransport) =
