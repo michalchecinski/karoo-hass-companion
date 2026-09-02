@@ -106,8 +106,9 @@ useful record of the intended scope but does not capture all later UX changes.
 - A whole-app session remains unlocked while moving between in-app screens and
   locks again when the app leaves the foreground or starts in a protected
   configuration.
-- **Forgot PIN / erase this account** is a full-width destructive button. It
-  always presents a cancelable confirmation dialog before erasing data.
+- After an account is configured, **Forgot PIN / erase this account** is a
+  full-width destructive button. It always presents a cancelable confirmation
+  dialog before erasing data.
 
 ## Navigation and visual conventions
 

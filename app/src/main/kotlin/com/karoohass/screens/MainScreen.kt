@@ -282,15 +282,22 @@ private fun HomeAssistantIcon(
     var confirmation by remember { mutableStateOf<String?>(null) }
     var currentPin by remember { mutableStateOf("") }
     var showEraseConfirmation by remember { mutableStateOf(false) }
-    LazyColumn(Modifier.fillMaxSize().padding(16.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
+    LazyColumn(
+        modifier = Modifier.fillMaxSize().padding(16.dp),
+        contentPadding = PaddingValues(bottom = BackControlSize),
+        verticalArrangement = Arrangement.spacedBy(12.dp),
+    ) {
         item {
             Text("Set up Home Assistant", style = MaterialTheme.typography.titleMedium)
-            Text("Use an externally reachable HTTPS address trusted by Karoo.")
+            Text(
+                "Enter a trusted, externally reachable HTTPS address.",
+                style = MaterialTheme.typography.bodySmall,
+            )
         }
         item {
             ElevatedCard(Modifier.fillMaxWidth()) {
                 Text(
-                    "Privacy: Home Assistant traffic goes directly between this Karoo and the address above. michalchecinski.github.io only identifies this app to Home Assistant; after you approve sign-in, Home Assistant returns directly to Karoo HASS.",
+                    "Privacy: This app connects directly to your Home Assistant. GitHub Pages only identifies the app; it never proxies your traffic.",
                     modifier = Modifier.padding(12.dp),
                     style = MaterialTheme.typography.bodySmall,
                 )
@@ -386,16 +393,18 @@ private fun HomeAssistantIcon(
         item { error?.let { Text(it, color = MaterialTheme.colorScheme.error) } }
         item { confirmation?.let { Text(it, color = MaterialTheme.colorScheme.primary) } }
         item { state.message?.let { Text(it, color = MaterialTheme.colorScheme.primary) } }
-        item {
-            Button(
-                onClick = { showEraseConfirmation = true },
-                modifier = Modifier.fillMaxWidth(),
-                colors =
-                    ButtonDefaults.buttonColors(
-                        containerColor = MaterialTheme.colorScheme.errorContainer,
-                        contentColor = MaterialTheme.colorScheme.onErrorContainer,
-                    ),
-            ) { Text("Forgot PIN / erase this account") }
+        if (state.settings.origin != null) {
+            item {
+                Button(
+                    onClick = { showEraseConfirmation = true },
+                    modifier = Modifier.fillMaxWidth(),
+                    colors =
+                        ButtonDefaults.buttonColors(
+                            containerColor = MaterialTheme.colorScheme.errorContainer,
+                            contentColor = MaterialTheme.colorScheme.onErrorContainer,
+                        ),
+                ) { Text("Forgot PIN / erase this account") }
+            }
         }
     }
     if (showEraseConfirmation) {
