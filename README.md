@@ -8,7 +8,8 @@ Karoo Home Assistant Companion is a focused Home Assistant remote for the Hammer
 
 - Connect the app to your existing Home Assistant.
 - Keep your favorite home controls together for quick access.
-- Run scripts and control locks, covers, lights, and switches.
+- Run scripts, press buttons, activate scenes, and control locks, covers,
+  lights, and switches.
 - Choose how the app accesses Home Assistant based on your needs: connect only when Karoo has Wi-Fi, or allow your paired phone to provide network access when Wi-Fi is unavailable.
 - Protect the whole app or selected controls with a PIN.
 - Confirm important actions before unlocking a door or opening a gate.
@@ -23,6 +24,8 @@ Karoo Home Assistant Companion is a focused Home Assistant remote for the Hammer
 ## Screenshots
 
 ![Quick Access](screenshots/emulator-karoo-480x800/main-empty-app-only.png)
+![Offline connection notice](screenshots/emulator-karoo-480x800/offline-connection-notice-app-only.png)
+![Button action picker](screenshots/emulator-karoo-480x800/button-action-picker-app-only.png)
 ![Set up Home Assistant](screenshots/emulator-karoo-480x800/onboarding-app-only.png)
 ![Settings](screenshots/emulator-karoo-480x800/settings-connected-app-only.png)
 

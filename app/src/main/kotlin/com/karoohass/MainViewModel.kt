@@ -7,6 +7,7 @@ import android.net.NetworkCapabilities
 import android.net.Uri
 import android.os.Build
 import android.util.Log
+import androidx.annotation.StringRes
 import androidx.lifecycle.AndroidViewModel
 import androidx.lifecycle.viewModelScope
 import com.karoohass.auth.OAuthManager
@@ -22,6 +23,7 @@ import com.karoohass.core.ResolvedAction
 import com.karoohass.core.SettingsStore
 import com.karoohass.core.actionHint
 import com.karoohass.core.allowsActionManagement
+import com.karoohass.core.hasActionIdentity
 import com.karoohass.core.resolve
 import com.karoohass.network.DirectWifiTransport
 import com.karoohass.network.HomeAssistantRepository
@@ -76,17 +78,17 @@ data class UiState(
                 when (settings.connectionPolicy) {
                     ConnectionPolicy.WIFI_ONLY ->
                         if (!wifiAvailable) {
-                            ConnectionNotice("No Wi-Fi connection", "Connect the Karoo to Wi-Fi, then try again.")
+                            ConnectionNotice(R.string.connection_notice_wifi_unavailable_title, R.string.connection_notice_wifi_unavailable_message)
                         } else {
                             ConnectionNotice(
-                                "Home Assistant can't be reached",
-                                "Check the Karoo's Wi-Fi connection and Home Assistant, then try again.",
+                                R.string.connection_notice_unreachable_title,
+                                R.string.connection_notice_wifi_unreachable_message,
                             )
                         }
                     ConnectionPolicy.ALLOW_COMPANION_FALLBACK ->
                         ConnectionNotice(
-                            "Home Assistant can't be reached",
-                            "Connect to Wi-Fi, or check that your phone is paired, Hammerhead Companion is running, and the phone has internet access.",
+                            R.string.connection_notice_unreachable_title,
+                            R.string.connection_notice_companion_unreachable_message,
                         )
                 }
             }
@@ -99,8 +101,8 @@ enum class EntityDiscoveryStatus { NOT_STARTED, LOADING, SUCCEEDED, FAILED }
 enum class ConnectionStatus { NOT_CHECKED, CHECKING, CONNECTED, UNREACHABLE }
 
 data class ConnectionNotice(
-    val title: String,
-    val message: String,
+    @StringRes val titleRes: Int,
+    @StringRes val messageRes: Int,
 )
 
 internal fun canCheckQuickAccessConnection(
@@ -172,8 +174,8 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
             }
         }
     private val policyTransport = PolicyTransport({ state.value.settings.connectionPolicy }, directTransport, KarooTransport(application))
-    private val repository = HomeAssistantRepository({ state.value.settings.origin }, policyTransport, tokens) { oauth.refresh(policyTransport) }
-    private val wifiRepository = HomeAssistantRepository({ state.value.settings.origin }, directTransport, tokens) { oauth.refresh(directTransport) }
+    private val repository = HomeAssistantRepository({ state.value.settings.origin }, policyTransport, tokens::load) { oauth.refresh(policyTransport) }
+    private val wifiRepository = HomeAssistantRepository({ state.value.settings.origin }, directTransport, tokens::load) { oauth.refresh(directTransport) }
     val state: StateFlow<UiState> =
         combine(
             combine(rawSettings, screen) { settings, current -> settings to current },
@@ -439,7 +441,7 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
             val found = wifiRepository.discover()
             val byId = found.associateBy { it.entityId }
             snapshots.value = byId
-            settingsStore.update { old -> old.copy(actions = old.actions.map { action -> byId[action.entityId]?.let { entity -> action.copy(displayName = entity.friendlyName, icon = entity.icon ?: action.icon) } ?: action }) }
+            settingsStore.update { old -> old.copy(actions = old.actions.map { action -> byId[action.entityId]?.let { entity -> action.copy(displayName = entity.friendlyName, icon = entity.icon) } ?: action }) }
             entityDiscoveryStatus.value = EntityDiscoveryStatus.SUCCEEDED
         } catch (error: CancellationException) {
             throw error
@@ -462,7 +464,7 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
         viewModelScope.launch {
             var completedOnboarding = false
             settingsStore.update { old ->
-                if (old.actions.any { it.entityId == entity.entityId && it.kind == kind }) {
+                if (hasActionIdentity(old.actions, entity.entityId, kind)) {
                     old
                 } else {
                     val action =
@@ -537,6 +539,11 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
                     message.value = "Action unavailable: state could not be refreshed"
                     return@launch
                 }
+            }
+            if (snapshot?.available == false) {
+                work.value = false
+                message.value = getApplication<Application>().getString(R.string.action_unavailable)
+                return@launch
             }
             if (intentGeneration != actionIntentGeneration) {
                 work.value = false

@@ -21,8 +21,8 @@ class ConnectionNoticeUiStateTest {
                 connectionStatus = ConnectionStatus.UNREACHABLE,
             )
 
-        assertEquals("No Wi-Fi connection", state.connectionNotice?.title)
-        assertEquals("Connect the Karoo to Wi-Fi, then try again.", state.connectionNotice?.message)
+        assertEquals(R.string.connection_notice_wifi_unavailable_title, state.connectionNotice?.titleRes)
+        assertEquals(R.string.connection_notice_wifi_unavailable_message, state.connectionNotice?.messageRes)
         assertFalse(state.canInvokeQuickAccessActions)
     }
 
@@ -34,10 +34,10 @@ class ConnectionNoticeUiStateTest {
                 connectionStatus = ConnectionStatus.UNREACHABLE,
             )
 
-        assertEquals("Home Assistant can't be reached", state.connectionNotice?.title)
+        assertEquals(R.string.connection_notice_unreachable_title, state.connectionNotice?.titleRes)
         assertEquals(
-            "Connect to Wi-Fi, or check that your phone is paired, Hammerhead Companion is running, and the phone has internet access.",
-            state.connectionNotice?.message,
+            R.string.connection_notice_companion_unreachable_message,
+            state.connectionNotice?.messageRes,
         )
         assertFalse(state.canInvokeQuickAccessActions)
     }
