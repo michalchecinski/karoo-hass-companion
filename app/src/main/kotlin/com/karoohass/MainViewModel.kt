@@ -458,7 +458,7 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
             }
             if (snapshot?.available == false) {
                 work.value = false
-                message.value = "Action unavailable"
+                message.value = getApplication<Application>().getString(R.string.action_unavailable)
                 return@launch
             }
             if (intentGeneration != actionIntentGeneration) {
