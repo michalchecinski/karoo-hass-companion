@@ -6,6 +6,7 @@ import android.net.Network
 import android.net.NetworkCapabilities
 import android.os.Build
 import android.util.Log
+import androidx.annotation.StringRes
 import androidx.lifecycle.AndroidViewModel
 import androidx.lifecycle.viewModelScope
 import com.karoohass.auth.OAuthManager
@@ -31,6 +32,7 @@ import com.karoohass.security.PinStore
 import com.karoohass.security.TokenStore
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.Job
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.StateFlow
@@ -47,6 +49,7 @@ data class UiState(
     val screen: Screen = Screen.HOME,
     val busy: Boolean = false,
     val wifiAvailable: Boolean = false,
+    val connectionStatus: ConnectionStatus = ConnectionStatus.NOT_CHECKED,
     val entityDiscoveryStatus: EntityDiscoveryStatus = EntityDiscoveryStatus.NOT_STARTED,
     val message: String? = null,
     val outcome: ActionOutcome? = null,
@@ -62,11 +65,62 @@ data class UiState(
 
     val showNoSupportedEntities: Boolean
         get() = canDiscoverEntities && snapshots.isEmpty() && entityDiscoveryStatus == EntityDiscoveryStatus.SUCCEEDED
+
+    val canInvokeQuickAccessActions: Boolean
+        get() = !busy && connectionStatus == ConnectionStatus.CONNECTED
+
+    val connectionNotice: ConnectionNotice?
+        get() =
+            if (connectionStatus != ConnectionStatus.UNREACHABLE) {
+                null
+            } else {
+                when (settings.connectionPolicy) {
+                    ConnectionPolicy.WIFI_ONLY ->
+                        if (!wifiAvailable) {
+                            ConnectionNotice(R.string.connection_notice_wifi_unavailable_title, R.string.connection_notice_wifi_unavailable_message)
+                        } else {
+                            ConnectionNotice(
+                                R.string.connection_notice_unreachable_title,
+                                R.string.connection_notice_wifi_unreachable_message,
+                            )
+                        }
+                    ConnectionPolicy.ALLOW_COMPANION_FALLBACK ->
+                        ConnectionNotice(
+                            R.string.connection_notice_unreachable_title,
+                            R.string.connection_notice_companion_unreachable_message,
+                        )
+                }
+            }
 }
 
 enum class Screen { HOME, SETUP, AUTH, ONBOARDING_POLICY, ONBOARDING_PIN, MANAGE, PIN }
 
 enum class EntityDiscoveryStatus { NOT_STARTED, LOADING, SUCCEEDED, FAILED }
+
+enum class ConnectionStatus { NOT_CHECKED, CHECKING, CONNECTED, UNREACHABLE }
+
+data class ConnectionNotice(
+    @StringRes val titleRes: Int,
+    @StringRes val messageRes: Int,
+)
+
+internal fun canCheckQuickAccessConnection(
+    settings: AppSettings,
+    screen: Screen,
+    appInForeground: Boolean,
+    wholeAppLocked: Boolean,
+): Boolean =
+    settings.origin != null &&
+        settings.actions.isNotEmpty() &&
+        settings.onboardingStep == OnboardingStep.COMPLETE &&
+        appInForeground &&
+        screen == Screen.HOME &&
+        (settings.pinMode != PinMode.WHOLE_APP || !wholeAppLocked)
+
+internal fun shouldStartConnectionCheck(
+    force: Boolean,
+    checkInProgress: Boolean,
+): Boolean = force || !checkInProgress
 
 internal fun shouldRefreshQuickAccessAfterWifiReconnect(
     wasWifiAvailable: Boolean,
@@ -97,28 +151,30 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
     private val authorizedUntil = MutableStateFlow(0L)
     private val unlocking = MutableStateFlow(false)
     private val wholeAppLocked = MutableStateFlow(true)
+    private var appInForeground = false
     private var actionIntentGeneration = 0L
     private var authorizationUrl: String? = null
     private val directTransport = DirectWifiTransport(application)
     private val wifiAvailable = MutableStateFlow(directTransport.isAvailable())
+    private val connectionStatus = MutableStateFlow(ConnectionStatus.NOT_CHECKED)
     private val entityDiscoveryStatus = MutableStateFlow(EntityDiscoveryStatus.NOT_STARTED)
     private var reconnectRefreshScheduled = false
     private val connectivityManager = application.getSystemService(ConnectivityManager::class.java)
     private val connectivityCallback =
         object : ConnectivityManager.NetworkCallback() {
             override fun onAvailable(network: Network) {
-                viewModelScope.launch { updateWifiAvailability() }
+                viewModelScope.launch { updateWifiAvailability(recheckConnection = true) }
             }
 
             override fun onLost(network: Network) {
-                viewModelScope.launch { updateWifiAvailability() }
+                viewModelScope.launch { updateWifiAvailability(recheckConnection = true) }
             }
 
             override fun onCapabilitiesChanged(
                 network: Network,
                 networkCapabilities: NetworkCapabilities,
             ) {
-                viewModelScope.launch { updateWifiAvailability() }
+                viewModelScope.launch { updateWifiAvailability(recheckConnection = true) }
             }
         }
     private val policyTransport = PolicyTransport({ state.value.settings.connectionPolicy }, directTransport, KarooTransport(application))
@@ -127,7 +183,9 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
     val state: StateFlow<UiState> =
         combine(
             combine(rawSettings, screen) { settings, current -> settings to current },
-            combine(snapshots, work, wifiAvailable, entityDiscoveryStatus) { loaded, isBusy, isWifiAvailable, discoveryStatus -> DiscoveryUiState(loaded, isBusy, isWifiAvailable, discoveryStatus) },
+            combine(snapshots, work, wifiAvailable, entityDiscoveryStatus, connectionStatus) { loaded, isBusy, isWifiAvailable, discoveryStatus, currentConnectionStatus ->
+                DiscoveryUiState(loaded, isBusy, isWifiAvailable, discoveryStatus, currentConnectionStatus)
+            },
             combine(message, pending, confirmation) { notice, request, confirmationRequest -> ActionUiState(notice, request, confirmationRequest) },
             combine(outcome, outcomeActionId, authorizedUntil, unlocking, wholeAppLocked) { result, actionId, auth, isUnlocking, isWholeAppLocked -> PinUiState(result, actionId, auth, isUnlocking, isWholeAppLocked) },
         ) { settingsAndScreen, discovery, action, pin ->
@@ -138,6 +196,7 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
                 busy = discovery.busy,
                 wifiAvailable = discovery.wifiAvailable,
                 entityDiscoveryStatus = discovery.status,
+                connectionStatus = discovery.connectionStatus,
                 message = action.message,
                 outcome = pin.outcome,
                 outcomeActionId = pin.actionId,
@@ -172,17 +231,20 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
             if (effectiveOrigin != null && hasTokens && effectiveStep != OnboardingStep.COMPLETE) {
                 openOnboardingStep(effectiveStep)
             } else if (persisted.pinMode != PinMode.WHOLE_APP && persisted.origin != null && persisted.actions.isNotEmpty() && hasTokens) {
+                checkHomeAssistantConnection()
                 refreshEntities(silent = true)
             }
         }
     }
 
     fun openSetup() {
+        cancelConnectionCheck()
         message.value = null
         screen.value = Screen.SETUP
     }
 
     fun openEntityChooser() {
+        cancelConnectionCheck()
         if (state.value.settings.onboardingStep.allowsActionManagement()) {
             message.value = null
             screen.value = Screen.MANAGE
@@ -200,6 +262,7 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
         pending.value = null
         confirmation.value = null
         message.value = null
+        checkHomeAssistantConnection()
     }
 
     fun back() {
@@ -212,6 +275,7 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
                 else -> Screen.HOME
             }
         message.value = null
+        if (screen.value == Screen.HOME) checkHomeAssistantConnection() else cancelConnectionCheck()
     }
 
     fun setOrigin(raw: String): String? {
@@ -258,7 +322,12 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
         screen.value = Screen.SETUP
     }
 
-    fun savePolicy(policy: ConnectionPolicy) = viewModelScope.launch { settingsStore.update { it.copy(connectionPolicy = policy) } }
+    fun savePolicy(policy: ConnectionPolicy) =
+        viewModelScope.launch {
+            settingsStore.update { it.copy(connectionPolicy = policy) }
+            rawSettings.first { it.connectionPolicy == policy }
+            checkHomeAssistantConnection()
+        }
 
     fun saveOnboardingPolicy(policy: ConnectionPolicy) =
         viewModelScope.launch {
@@ -420,6 +489,7 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
             if (completedOnboarding) {
                 message.value = null
                 screen.value = Screen.HOME
+                checkHomeAssistantConnection()
             }
         }
 
@@ -536,7 +606,10 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
                             Screen.HOME
                         }
                     pending.value = null
-                    if (wholeAppProtected) refreshEntities(silent = true)
+                    if (wholeAppProtected) {
+                        refreshEntities(silent = true)
+                        checkHomeAssistantConnection()
+                    }
                     resolved?.let(::begin)
                 }
                 is com.karoohass.security.PinResult.Locked -> message.value = "PIN locked for ${result.remainingMs / 1000}s"
@@ -606,12 +679,16 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
             confirmation.value = null
             wholeAppLocked.value = false
             screen.value = Screen.SETUP
+            cancelConnectionCheck()
         }
 
     fun foregroundChanged(foreground: Boolean) {
+        appInForeground = foreground
         if (foreground) {
-            updateWifiAvailability()
+            updateWifiAvailability(recheckConnection = true)
+            checkHomeAssistantConnection()
         } else {
+            cancelConnectionCheck()
             actionIntentGeneration++
             confirmation.value = null
             if (pending.value != null) {
@@ -626,7 +703,10 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
     }
 
     fun enforceWholeAppPin() {
-        if (state.value.settings.pinMode == PinMode.WHOLE_APP && state.value.settings.origin != null) wholeAppLocked.value = true
+        if (state.value.settings.pinMode == PinMode.WHOLE_APP && state.value.settings.origin != null) {
+            wholeAppLocked.value = true
+            cancelConnectionCheck()
+        }
     }
 
     private fun openOnboardingStep(step: OnboardingStep) {
@@ -642,17 +722,55 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
             updateWifiAvailability()
             if (wifiAvailable.value) discover()
         }
+        if (step != OnboardingStep.COMPLETE) cancelConnectionCheck()
     }
 
     override fun onCleared() {
+        cancelConnectionCheck()
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.N) runCatching { connectivityManager.unregisterNetworkCallback(connectivityCallback) }
         super.onCleared()
     }
 
-    private fun updateWifiAvailability() {
+    fun retryHomeAssistantConnection() = checkHomeAssistantConnection(force = true)
+
+    private var connectionCheck: Job? = null
+
+    private fun checkHomeAssistantConnection(force: Boolean = false) {
+        if (!isQuickAccessEligible()) return
+        if (!shouldStartConnectionCheck(force, connectionCheck?.isActive == true)) return
+        connectionCheck?.cancel()
+        connectionStatus.value = ConnectionStatus.CHECKING
+        connectionCheck =
+            viewModelScope.launch {
+                val reachable =
+                    try {
+                        repository.isReachable()
+                    } catch (error: CancellationException) {
+                        throw error
+                    } catch (_: Exception) {
+                        false
+                    }
+                if (isQuickAccessEligible()) {
+                    connectionStatus.value = if (reachable) ConnectionStatus.CONNECTED else ConnectionStatus.UNREACHABLE
+                }
+            }
+    }
+
+    private fun cancelConnectionCheck() {
+        connectionCheck?.cancel()
+        connectionCheck = null
+        connectionStatus.value = ConnectionStatus.NOT_CHECKED
+    }
+
+    private fun isQuickAccessEligible(): Boolean {
+        return canCheckQuickAccessConnection(state.value.settings, screen.value, appInForeground, wholeAppLocked.value)
+    }
+
+    private fun updateWifiAvailability(recheckConnection: Boolean = false) {
         val wasWifiAvailable = wifiAvailable.value
         val isWifiAvailable = directTransport.isAvailable()
         wifiAvailable.value = isWifiAvailable
+        if (recheckConnection) checkHomeAssistantConnection()
         if (!reconnectRefreshScheduled && !wasWifiAvailable && isWifiAvailable) {
             scheduleQuickAccessRefreshAfterWifiReconnect(wasWifiAvailable, isWifiAvailable)
         }
@@ -695,6 +813,7 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
         val busy: Boolean,
         val wifiAvailable: Boolean,
         val status: EntityDiscoveryStatus,
+        val connectionStatus: ConnectionStatus,
     )
 
     private data class ActionUiState(

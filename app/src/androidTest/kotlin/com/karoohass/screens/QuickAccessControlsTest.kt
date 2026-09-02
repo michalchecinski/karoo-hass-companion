@@ -5,6 +5,7 @@ import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.test.assertCountEquals
+import androidx.compose.ui.test.assertIsDisplayed
 import androidx.compose.ui.test.assertIsNotEnabled
 import androidx.compose.ui.test.assertTextContains
 import androidx.compose.ui.test.junit4.createAndroidComposeRule
@@ -12,10 +13,12 @@ import androidx.compose.ui.test.onAllNodesWithText
 import androidx.compose.ui.test.onNodeWithTag
 import androidx.compose.ui.test.onNodeWithText
 import androidx.compose.ui.test.performClick
+import com.karoohass.ConnectionStatus
 import com.karoohass.UiState
 import com.karoohass.core.ActionKind
 import com.karoohass.core.ActionOutcome
 import com.karoohass.core.AppSettings
+import com.karoohass.core.ConnectionPolicy
 import com.karoohass.core.EntitySnapshot
 import com.karoohass.core.OnboardingStep
 import com.karoohass.core.QuickAccessAction
@@ -75,6 +78,24 @@ class QuickAccessControlsTest {
         composeRule.onNodeWithTag("quick-access-${button.id}").assertIsNotEnabled()
 
         assertEquals(0, invocations)
+    }
+
+    @Test
+    fun offlineNoticeExplainsCompanionRecoveryAndKeepsTilesDisabled() {
+        val action = action("button-id", "button.garage", ActionKind.PRESS_BUTTON, "Garage remote")
+        var retries = 0
+        val state =
+            homeState(listOf(action), mapOf(action.entityId to snapshot(action.entityId, "button", "unknown"))).copy(
+                settings = homeState(listOf(action), emptyMap()).settings.copy(connectionPolicy = ConnectionPolicy.ALLOW_COMPANION_FALLBACK),
+                connectionStatus = ConnectionStatus.UNREACHABLE,
+            )
+
+        composeRule.setContent { AppTheme { Home(state, {}, {}, { retries += 1 }) } }
+
+        composeRule.onNodeWithText("Home Assistant can't be reached").assertIsDisplayed()
+        composeRule.onNodeWithText("Try again").performClick()
+        composeRule.onNodeWithTag("quick-access-${action.id}").assertIsNotEnabled()
+        composeRule.runOnIdle { assertEquals(1, retries) }
     }
 
     @Test

@@ -13,6 +13,26 @@ import org.junit.Test
 
 class HomeAssistantRepositoryTest {
     @Test
+    fun `reachability check authenticates the safe API request`() =
+        runBlocking {
+            val transport = RecordingTransport(HttpResponse(200, emptyMap(), "ok".toByteArray()))
+            val savedTokens = Tokens("probe-" + "credential", null, 0)
+            val repository = HomeAssistantRepository({ "https://home.example" }, transport, { savedTokens }) { false }
+
+            assertTrue(repository.isReachable())
+            assertEquals("GET", transport.requests.single().method)
+            assertTrue(transport.requests.single().url.endsWith("/api/"))
+            assertEquals("Bearer ${savedTokens.accessToken}", transport.requests.single().headers["Authorization"])
+        }
+
+    @Test
+    fun `reachability check rejects HTTP errors and transport error responses`() =
+        runBlocking {
+            assertFalse(repository(RecordingTransport(HttpResponse(503, emptyMap(), null))).isReachable())
+            assertFalse(repository(RecordingTransport(HttpResponse(200, emptyMap(), null, error = "offline"))).isReachable())
+        }
+
+    @Test
     fun `button press uses the standard service and entity only payload`() =
         runBlocking {
             val transport = RecordingTransport(HttpResponse(200, emptyMap(), "[]".toByteArray()))
