@@ -118,6 +118,11 @@ internal fun canCheckQuickAccessConnection(
         screen == Screen.HOME &&
         (settings.pinMode != PinMode.WHOLE_APP || !wholeAppLocked)
 
+internal fun shouldStartConnectionCheck(
+    force: Boolean,
+    checkInProgress: Boolean,
+): Boolean = force || !checkInProgress
+
 internal fun shouldRefreshQuickAccessAfterWifiReconnect(
     wasWifiAvailable: Boolean,
     wifiAvailable: Boolean,
@@ -737,7 +742,7 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
 
     private fun checkHomeAssistantConnection(force: Boolean = false) {
         if (!isQuickAccessEligible()) return
-        if (!force && connectionCheck?.isActive == true) return
+        if (!shouldStartConnectionCheck(force, connectionCheck?.isActive == true)) return
         connectionCheck?.cancel()
         connectionStatus.value = ConnectionStatus.CHECKING
         connectionCheck =
@@ -770,7 +775,7 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
         val wasWifiAvailable = wifiAvailable.value
         val isWifiAvailable = directTransport.isAvailable()
         wifiAvailable.value = isWifiAvailable
-        if (recheckConnection) checkHomeAssistantConnection(force = true)
+        if (recheckConnection) checkHomeAssistantConnection()
         if (!reconnectRefreshScheduled && !wasWifiAvailable && isWifiAvailable) {
             scheduleQuickAccessRefreshAfterWifiReconnect(wasWifiAvailable, isWifiAvailable)
         }

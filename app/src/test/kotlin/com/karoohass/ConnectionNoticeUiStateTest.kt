@@ -70,6 +70,12 @@ class ConnectionNoticeUiStateTest {
         assertFalse(canCheckQuickAccessConnection(settings, Screen.HOME, appInForeground = false, wholeAppLocked = false))
     }
 
+    @Test fun `network changes do not restart an active connection check`() {
+        assertFalse(shouldStartConnectionCheck(force = false, checkInProgress = true))
+        assertTrue(shouldStartConnectionCheck(force = false, checkInProgress = false))
+        assertTrue(shouldStartConnectionCheck(force = true, checkInProgress = true))
+    }
+
     private fun configuredSettings(policy: ConnectionPolicy) =
         AppSettings(
             origin = "https://home.example",
