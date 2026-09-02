@@ -2,10 +2,11 @@
     <string name="app_name">Karoo HASS</string>
     <string name="oauth_client_id">https://michalchecinski.github.io/karoo-hass-companion/</string>
     <string name="oauth_redirect_uri">karoohass://auth-callback</string>
-    <string name="setup_origin_help">Enter a trusted, externally reachable HTTPS address.</string>
+    <string name="setup_origin_help">Enter a trusted HTTPS address reachable from your Karoo.</string>
     <string name="setup_privacy_notice">Privacy: This app connects directly to your Home Assistant. The sign-in webpage only identifies the app; it never proxies traffic.</string>
     <string name="continue_to_home_assistant">Continue to Home Assistant</string>
     <string name="oauth_callback_incomplete">Sign-in callback was incomplete. Please try again.</string>
+    <string name="erase_account">Forgot PIN / erase this account</string>
     <string name="action_unavailable">Action unavailable</string>
     <string name="action_picker_no_supported_actions">This entity reports no supported Quick Access actions.</string>
     <string name="action_picker_add_toggle">Add a toggle action.</string>

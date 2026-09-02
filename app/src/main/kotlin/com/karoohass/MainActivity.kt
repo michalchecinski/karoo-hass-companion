@@ -45,6 +45,7 @@ class MainActivity : ComponentActivity() {
 
     private fun handleOAuthCallbackError(intent: Intent) {
         if (intent.getBooleanExtra(OAuthCallbackActivity.EXTRA_CALLBACK_ERROR, false)) {
+            intent.removeExtra(OAuthCallbackActivity.EXTRA_CALLBACK_ERROR)
             model.oauthCallbackFailed()
         }
     }

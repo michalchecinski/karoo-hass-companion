@@ -24,6 +24,8 @@ internal fun isOAuthCallbackUri(
 ): Boolean =
     scheme == "karoohass" && host == "auth-callback" && path.isNullOrEmpty()
 
+enum class OAuthCallbackReceipt { ACCEPTED, INVALID, NO_PENDING_AUTHORIZATION }
+
 class OAuthManager(private val context: Context, private val tokenStore: TokenStore) {
     private val prefs = context.getSharedPreferences("oauth", Context.MODE_PRIVATE)
     private val clientId = context.getString(R.string.oauth_client_id)
@@ -80,15 +82,17 @@ class OAuthManager(private val context: Context, private val tokenStore: TokenSt
         tokenStore.clear()
     }
 
-    fun receive(uri: Uri): Boolean {
+    fun receive(uri: Uri): OAuthCallbackReceipt {
+        val expectedState = prefs.getString("state", null) ?: return OAuthCallbackReceipt.NO_PENDING_AUTHORIZATION
         val code = uri.getQueryParameter("code")
         val state = uri.getQueryParameter("state")
-        if (code.isNullOrBlank() || state.isNullOrBlank()) {
-            Log.w("KarooHassOAuth", "Authorization callback did not contain both code and state")
-            return false
+        if (code.isNullOrBlank() || state != expectedState) {
+            Log.w("KarooHassOAuth", "Authorization callback was incomplete or did not match the pending sign-in")
+            clearCallback()
+            return OAuthCallbackReceipt.INVALID
         }
         prefs.edit().putString("code", code).putString("callbackState", state).apply()
-        return true
+        return OAuthCallbackReceipt.ACCEPTED
     }
 
     private fun clearCallback() = prefs.edit().remove("code").remove("callbackState").remove("state").apply()
@@ -104,17 +108,24 @@ class OAuthCallbackActivity : ComponentActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         val callback =
-            intent.data?.takeIf {
-                isOAuthCallbackUri(it.scheme, it.host, it.path)
-            }
-        val accepted =
-            callback != null &&
-                OAuthManager(applicationContext, TokenStore(applicationContext)).receive(callback)
-        startActivity(
-            Intent(this, com.karoohass.MainActivity::class.java)
-                .putExtra(EXTRA_CALLBACK_ERROR, !accepted)
-                .addFlags(Intent.FLAG_ACTIVITY_CLEAR_TOP or Intent.FLAG_ACTIVITY_SINGLE_TOP),
-        )
+            intent.data?.takeIf { isOAuthCallbackUri(it.scheme, it.host, it.path) }
+                ?: run {
+                    finish()
+                    return
+                }
+        when (OAuthManager(applicationContext, TokenStore(applicationContext)).receive(callback)) {
+            OAuthCallbackReceipt.ACCEPTED -> returnToMain(false)
+            OAuthCallbackReceipt.INVALID -> returnToMain(true)
+            OAuthCallbackReceipt.NO_PENDING_AUTHORIZATION -> Unit
+        }
         finish()
+    }
+
+    private fun returnToMain(showError: Boolean) {
+        val mainIntent =
+            Intent(this, com.karoohass.MainActivity::class.java)
+                .addFlags(Intent.FLAG_ACTIVITY_CLEAR_TOP or Intent.FLAG_ACTIVITY_SINGLE_TOP)
+        if (showError) mainIntent.putExtra(EXTRA_CALLBACK_ERROR, true)
+        startActivity(mainIntent)
     }
 }

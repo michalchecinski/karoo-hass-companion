@@ -4,7 +4,6 @@ import android.app.Application
 import android.net.ConnectivityManager
 import android.net.Network
 import android.net.NetworkCapabilities
-import android.net.Uri
 import android.os.Build
 import android.util.Log
 import androidx.lifecycle.AndroidViewModel
@@ -231,15 +230,6 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
     }
 
     fun currentAuthorizationUrl() = authorizationUrl
-
-    fun receiveOAuthCallback(uri: Uri) {
-        if (!oauth.receive(uri)) {
-            oauthCallbackFailed()
-            return
-        }
-        message.value = "Finishing sign-in…"
-        callbackReceived()
-    }
 
     fun callbackReceived() =
         viewModelScope.launch {

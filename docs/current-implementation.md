@@ -6,8 +6,8 @@ useful record of the intended scope but does not capture all later UX changes.
 
 ## Home Assistant connection
 
-- The app accepts a system-trusted, externally reachable HTTPS Home Assistant
-  origin and normalizes it before authentication.
+- The app accepts a system-trusted HTTPS Home Assistant origin reachable from
+  the Karoo and normalizes it before authentication.
 - Authentication uses Home Assistant OAuth in an embedded WebView. It uses the
   GitHub Pages client ID `https://michalchecinski.github.io/karoo-hass-companion/`
   only to identify the app to Home Assistant; Home Assistant returns the

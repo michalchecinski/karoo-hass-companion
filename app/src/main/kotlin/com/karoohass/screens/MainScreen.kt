@@ -412,7 +412,7 @@ private fun HomeAssistantIcon(
                             containerColor = MaterialTheme.colorScheme.errorContainer,
                             contentColor = MaterialTheme.colorScheme.onErrorContainer,
                         ),
-                ) { Text("Forgot PIN / erase this account") }
+                ) { Text(stringResource(R.string.erase_account)) }
             }
         }
     }
