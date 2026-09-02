@@ -4,7 +4,6 @@ import android.app.Application
 import android.net.ConnectivityManager
 import android.net.Network
 import android.net.NetworkCapabilities
-import android.net.Uri
 import android.os.Build
 import android.util.Log
 import androidx.annotation.StringRes
@@ -296,15 +295,6 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
 
     fun currentAuthorizationUrl() = authorizationUrl
 
-    fun receiveOAuthCallback(uri: Uri) {
-        if (!oauth.receive(uri)) {
-            message.value = "Sign-in callback was incomplete. Please try again."
-            return
-        }
-        message.value = "Finishing sign-in…"
-        callbackReceived()
-    }
-
     fun callbackReceived() =
         viewModelScope.launch {
             work.value = true
@@ -326,6 +316,11 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
                 }
             work.value = false
         }
+
+    fun oauthCallbackFailed() {
+        message.value = getApplication<Application>().getString(R.string.oauth_callback_incomplete)
+        screen.value = Screen.SETUP
+    }
 
     fun savePolicy(policy: ConnectionPolicy) =
         viewModelScope.launch {

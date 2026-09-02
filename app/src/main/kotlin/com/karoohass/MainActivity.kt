@@ -1,11 +1,13 @@
 package com.karoohass
 
+import android.content.Intent
 import android.os.Bundle
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
 import androidx.activity.viewModels
 import androidx.compose.runtime.getValue
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
+import com.karoohass.auth.OAuthCallbackActivity
 import com.karoohass.screens.MainScreen
 import com.karoohass.theme.AppTheme
 
@@ -20,6 +22,13 @@ class MainActivity : ComponentActivity() {
                 MainScreen(state, model, ::finish)
             }
         }
+        handleOAuthCallbackError(intent)
+    }
+
+    override fun onNewIntent(intent: Intent) {
+        super.onNewIntent(intent)
+        setIntent(intent)
+        handleOAuthCallbackError(intent)
     }
 
     override fun onResume() {
@@ -32,5 +41,12 @@ class MainActivity : ComponentActivity() {
     override fun onStop() {
         model.foregroundChanged(false)
         super.onStop()
+    }
+
+    private fun handleOAuthCallbackError(intent: Intent) {
+        if (intent.getBooleanExtra(OAuthCallbackActivity.EXTRA_CALLBACK_ERROR, false)) {
+            intent.removeExtra(OAuthCallbackActivity.EXTRA_CALLBACK_ERROR)
+            model.oauthCallbackFailed()
+        }
     }
 }

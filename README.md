@@ -14,6 +14,14 @@ Karoo Home Assistant Companion is a focused Home Assistant remote for the Hammer
 - Protect the whole app or selected controls with a PIN.
 - Confirm important actions before unlocking a door or opening a gate.
 
+## Privacy and sign-in
+
+Home Assistant traffic goes directly between your Karoo and the Home Assistant
+address you configure. The webpage used during sign-in only identifies the app
+to Home Assistant; once approved, Home Assistant returns directly to the
+installed app. The project does not operate a relay or proxy for your Home
+Assistant traffic.
+
 ### Example use cases
 
 - Open your garage door or gate as you arrive.

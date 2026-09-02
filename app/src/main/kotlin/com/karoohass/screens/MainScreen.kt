@@ -70,6 +70,7 @@ import com.karoohass.R
 import com.karoohass.Screen
 import com.karoohass.UiState
 import com.karoohass.auth.OAuthCallbackActivity
+import com.karoohass.auth.isOAuthCallbackUri
 import com.karoohass.core.ActionKind
 import com.karoohass.core.ActionOutcome
 import com.karoohass.core.ConnectionPolicy
@@ -113,7 +114,7 @@ fun MainScreen(
                         Home(state, model::invoke, model::openSetup, model::retryHomeAssistantConnection)
                     }
                 Screen.SETUP -> Setup(state, model)
-                Screen.AUTH -> OAuthWebView(model.currentAuthorizationUrl(), model::receiveOAuthCallback)
+                Screen.AUTH -> OAuthWebView(model.currentAuthorizationUrl())
                 Screen.ONBOARDING_POLICY -> OnboardingPolicy(state, model)
                 Screen.ONBOARDING_PIN -> OnboardingPin(state, model)
                 Screen.MANAGE -> Manage(state, model)
@@ -315,15 +316,31 @@ private fun HomeAssistantIcon(
     var confirmation by remember { mutableStateOf<String?>(null) }
     var currentPin by remember { mutableStateOf("") }
     var showEraseConfirmation by remember { mutableStateOf(false) }
-    LazyColumn(Modifier.fillMaxSize().padding(16.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
+    LazyColumn(
+        modifier = Modifier.fillMaxSize().padding(16.dp),
+        contentPadding = PaddingValues(bottom = BackControlSize),
+        verticalArrangement = Arrangement.spacedBy(12.dp),
+    ) {
         item {
             Text("Set up Home Assistant", style = MaterialTheme.typography.titleMedium)
-            Text("Use an externally reachable HTTPS address trusted by Karoo.")
+            Text(
+                stringResource(R.string.setup_origin_help),
+                style = MaterialTheme.typography.bodySmall,
+            )
+        }
+        item {
+            ElevatedCard(Modifier.fillMaxWidth()) {
+                Text(
+                    stringResource(R.string.setup_privacy_notice),
+                    modifier = Modifier.padding(12.dp),
+                    style = MaterialTheme.typography.bodySmall,
+                )
+            }
         }
         item { OutlinedTextField(url, { url = it }, label = { Text("Home Assistant URL") }, singleLine = true) }
         item {
             if (state.settings.origin == null || state.settings.onboardingStep == OnboardingStep.CONNECT) {
-                Button(onClick = { error = model.beginAuthentication(url) }) { Text("Sign in with Home Assistant") }
+                Button(onClick = { error = model.beginAuthentication(url) }) { Text(stringResource(R.string.continue_to_home_assistant)) }
             } else {
                 Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
                     Text("Connected to ${state.settings.origin}", color = MaterialTheme.colorScheme.primary)
@@ -410,16 +427,18 @@ private fun HomeAssistantIcon(
         item { error?.let { Text(it, color = MaterialTheme.colorScheme.error) } }
         item { confirmation?.let { Text(it, color = MaterialTheme.colorScheme.primary) } }
         item { state.message?.let { Text(it, color = MaterialTheme.colorScheme.primary) } }
-        item {
-            Button(
-                onClick = { showEraseConfirmation = true },
-                modifier = Modifier.fillMaxWidth(),
-                colors =
-                    ButtonDefaults.buttonColors(
-                        containerColor = MaterialTheme.colorScheme.errorContainer,
-                        contentColor = MaterialTheme.colorScheme.onErrorContainer,
-                    ),
-            ) { Text("Forgot PIN / erase this account") }
+        if (state.settings.origin != null) {
+            item {
+                Button(
+                    onClick = { showEraseConfirmation = true },
+                    modifier = Modifier.fillMaxWidth(),
+                    colors =
+                        ButtonDefaults.buttonColors(
+                            containerColor = MaterialTheme.colorScheme.errorContainer,
+                            contentColor = MaterialTheme.colorScheme.onErrorContainer,
+                        ),
+                ) { Text(stringResource(R.string.erase_account)) }
+            }
         }
     }
     if (showEraseConfirmation) {
@@ -578,7 +597,6 @@ private fun PinMode.description() =
 @Composable
 private fun OAuthWebView(
     url: String?,
-    onCallback: (Uri) -> Unit,
 ) {
     if (url == null) {
         Text("Missing Home Assistant URL", Modifier.padding(16.dp))
@@ -594,7 +612,7 @@ private fun OAuthWebView(
                             view: WebView,
                             request: WebResourceRequest,
                         ): Boolean {
-                            return openOAuthCallback(context, request.url, onCallback)
+                            return openOAuthCallback(context, request.url)
                         }
 
                         @Deprecated("Deprecated in Java")
@@ -602,7 +620,7 @@ private fun OAuthWebView(
                             view: WebView,
                             url: String,
                         ): Boolean {
-                            return openOAuthCallback(context, Uri.parse(url), onCallback)
+                            return openOAuthCallback(context, Uri.parse(url))
                         }
                     }
                 loadUrl(url)
@@ -615,25 +633,10 @@ private fun OAuthWebView(
 private fun openOAuthCallback(
     context: android.content.Context,
     uri: Uri,
-    onCallback: (Uri) -> Unit,
 ): Boolean {
-    val expected = Uri.parse(context.getString(R.string.oauth_redirect_uri))
-    val isHttpsCallback = uri.scheme == expected.scheme && uri.host == expected.host && uri.path == expected.path
-    val isCustomCallback = uri.scheme == "karoohass" && uri.host == "auth-callback"
-    if (!isHttpsCallback && !isCustomCallback) return false
-    if (isHttpsCallback) {
-        Log.d("KarooHassOAuth", "Received Home Assistant authorization callback")
-        onCallback(uri)
-        return true
-    }
-    val callback =
-        Uri.Builder()
-            .scheme("karoohass")
-            .authority("auth-callback")
-            .encodedQuery(uri.encodedQuery)
-            .build()
-    Log.d("KarooHassOAuth", "Received fallback Home Assistant authorization callback")
-    context.startActivity(Intent(context, OAuthCallbackActivity::class.java).setData(callback))
+    if (!isOAuthCallbackUri(uri.scheme, uri.host, uri.path)) return false
+    Log.d("KarooHassOAuth", "Received Home Assistant authorization callback")
+    context.startActivity(Intent(context, OAuthCallbackActivity::class.java).setData(uri))
     return true
 }
 
