@@ -129,7 +129,7 @@ class OAuthCallbackActivity : ComponentActivity() {
         when (OAuthManager(applicationContext, TokenStore(applicationContext)).receive(callback)) {
             OAuthCallbackReceipt.ACCEPTED -> returnToMain(false)
             OAuthCallbackReceipt.INVALID -> returnToMain(true)
-            OAuthCallbackReceipt.NO_PENDING_AUTHORIZATION -> returnToMain(true)
+            OAuthCallbackReceipt.NO_PENDING_AUTHORIZATION -> returnToMain(false)
         }
         finish()
     }
