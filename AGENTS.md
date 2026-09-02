@@ -26,6 +26,9 @@ Do not use an `agent/` prefix for branch names.
 When creating PR use `.github/PULL_REQUEST_TEMPLATE.md` and check all items on checklist.
 When there was a UI change in the PR include screenshots of changed screens only (use `karoo-screenshots` skill).
 
+### Human judgment
+If a review comment or any other issue genuinely requires human judgment, ask the user for a decision. Do not resolve the comment or make that decision yourself.
+
 ## Hammerhead Karoo integration
 
 When implementing Hammerhead Karoo functionality please follow guidelines and code samples from the following official Karoo sdk repository: https://github.com/hammerheadnav/karoo-ext. Especially different data sources, types and extensions are available here: https://github.com/hammerheadnav/karoo-ext/tree/master/app/src/main/kotlin/io/hammerhead/sampleext/extension.
