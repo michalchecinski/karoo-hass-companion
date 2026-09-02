@@ -7,6 +7,7 @@ import android.util.Log
 import android.webkit.WebResourceRequest
 import android.webkit.WebView
 import android.webkit.WebViewClient
+import androidx.annotation.StringRes
 import androidx.compose.foundation.Image
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
@@ -56,6 +57,7 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.res.painterResource
+import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.input.ImeAction
 import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.text.input.PasswordVisualTransformation
@@ -732,30 +734,32 @@ internal fun ActionPicker(
         text = {
             Column {
                 Text(
-                    when {
-                        kinds.isEmpty() -> "This entity reports no supported Quick Access actions."
-                        singleKind == ActionKind.TOGGLE -> "Add a toggle action."
-                        singleKind == ActionKind.PRESS_BUTTON -> "Add a button press."
-                        singleKind == ActionKind.ACTIVATE_SCENE -> "Add a scene activation."
-                        singleKind == ActionKind.CONTROL_LOCK -> "Add a state-aware lock control."
-                        singleKind == ActionKind.CONTROL_COVER -> "Add a state-aware cover control."
-                        else -> "Choose operation"
-                    },
+                    stringResource(
+                        when {
+                            kinds.isEmpty() -> R.string.action_picker_no_supported_actions
+                            singleKind == ActionKind.TOGGLE -> R.string.action_picker_add_toggle
+                            singleKind == ActionKind.PRESS_BUTTON -> R.string.action_picker_add_button_press
+                            singleKind == ActionKind.ACTIVATE_SCENE -> R.string.action_picker_add_scene_activation
+                            singleKind == ActionKind.CONTROL_LOCK -> R.string.action_picker_add_lock_control
+                            singleKind == ActionKind.CONTROL_COVER -> R.string.action_picker_add_cover_control
+                            else -> R.string.action_picker_choose_operation
+                        },
+                    ),
                 )
                 if (kinds.isNotEmpty()) {
                     Row(verticalAlignment = Alignment.CenterVertically) {
                         Checkbox(protect, setProtect, modifier = Modifier.testTag("action-picker-protect"))
-                        Text("Require PIN")
+                        Text(stringResource(R.string.action_picker_require_pin))
                     }
                     Row(verticalAlignment = Alignment.CenterVertically) {
                         Checkbox(confirmation, setConfirmation, modifier = Modifier.testTag("action-picker-confirm"))
-                        Text("Confirm action")
+                        Text(stringResource(R.string.action_picker_confirm_action))
                     }
-                    if (singleKind == ActionKind.CONTROL_LOCK) Text("Unlock is always confirmed.", style = MaterialTheme.typography.bodySmall)
-                    if (singleKind == ActionKind.CONTROL_COVER) Text("Open is always confirmed.", style = MaterialTheme.typography.bodySmall)
+                    if (singleKind == ActionKind.CONTROL_LOCK) Text(stringResource(R.string.action_picker_unlock_always_confirmed), style = MaterialTheme.typography.bodySmall)
+                    if (singleKind == ActionKind.CONTROL_COVER) Text(stringResource(R.string.action_picker_open_always_confirmed), style = MaterialTheme.typography.bodySmall)
                 }
-                if (alreadyAdded) Text("Already added", color = MaterialTheme.colorScheme.error)
-                if (singleKind == null) kinds.forEach { kind -> TextButton(onClick = { add(kind) }) { Text(kind.label()) } }
+                if (alreadyAdded) Text(stringResource(R.string.action_picker_already_added), color = MaterialTheme.colorScheme.error)
+                if (singleKind == null) kinds.forEach { kind -> TextButton(onClick = { add(kind) }) { Text(stringResource(kind.labelResource())) } }
             }
         },
         confirmButton = {
@@ -764,21 +768,22 @@ internal fun ActionPicker(
                     onClick = { add(singleKind) },
                     enabled = !alreadyAdded,
                     modifier = Modifier.testTag("action-picker-add"),
-                ) { Text("Add") }
+                ) { Text(stringResource(R.string.action_picker_add)) }
             }
         },
-        dismissButton = { TextButton(onClick = dismiss) { Text("Cancel") } },
+        dismissButton = { TextButton(onClick = dismiss) { Text(stringResource(R.string.action_picker_cancel)) } },
     )
 }
 
-private fun ActionKind.label() =
+@StringRes
+private fun ActionKind.labelResource() =
     when (this) {
-        ActionKind.RUN_SCRIPT -> "Run"
-        ActionKind.PRESS_BUTTON -> "Press"
-        ActionKind.ACTIVATE_SCENE -> "Activate"
-        ActionKind.CONTROL_LOCK -> "Control lock"
-        ActionKind.CONTROL_COVER -> "Control cover"
-        ActionKind.TOGGLE -> "Toggle"
+        ActionKind.RUN_SCRIPT -> R.string.action_kind_run
+        ActionKind.PRESS_BUTTON -> R.string.action_kind_press
+        ActionKind.ACTIVATE_SCENE -> R.string.action_kind_activate
+        ActionKind.CONTROL_LOCK -> R.string.action_kind_control_lock
+        ActionKind.CONTROL_COVER -> R.string.action_kind_control_cover
+        ActionKind.TOGGLE -> R.string.action_kind_toggle
     }
 
 @Composable private fun PinEntry(
