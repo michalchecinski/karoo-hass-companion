@@ -15,7 +15,8 @@ useful record of the intended scope but does not capture all later UX changes.
   link.
 - The callback is intercepted by the app and the authorization code is
   exchanged over direct Wi-Fi. Tokens are encrypted with Android Keystore
-  AES-GCM storage.
+  AES-GCM storage. An incomplete, stale, or invalid callback returns to Setup
+  with a retry message rather than leaving the rider in the sign-in browser.
 - Home Assistant API traffic is never routed through a project-operated server.
   The GitHub Pages site carries the OAuth client metadata required by Home
   Assistant's native-app flow. Both the direct deep link and the legacy HTTPS

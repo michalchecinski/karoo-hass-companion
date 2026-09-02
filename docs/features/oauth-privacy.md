@@ -16,7 +16,8 @@ callback route.
   `karoohass://auth-callback` redirect URI.
 - After approval, Home Assistant opens that deep link directly. The app checks
   the callback URI, validates OAuth state, and exchanges the authorization code
-  directly with the configured Home Assistant instance.
+  directly with the configured Home Assistant instance. An incomplete, stale,
+  or invalid callback returns the rider to Setup with a retry message.
 - The legacy GitHub Pages HTTPS callback stays published so older app releases
   that use it can still complete sign-in.
 
