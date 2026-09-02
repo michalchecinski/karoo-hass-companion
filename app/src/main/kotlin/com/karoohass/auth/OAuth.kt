@@ -26,6 +26,17 @@ internal fun isOAuthCallbackUri(
 
 enum class OAuthCallbackReceipt { ACCEPTED, INVALID, NO_PENDING_AUTHORIZATION }
 
+internal fun validateOAuthCallback(
+    expectedState: String?,
+    code: String?,
+    returnedState: String?,
+): OAuthCallbackReceipt =
+    when {
+        expectedState == null -> OAuthCallbackReceipt.NO_PENDING_AUTHORIZATION
+        code.isNullOrBlank() || returnedState != expectedState -> OAuthCallbackReceipt.INVALID
+        else -> OAuthCallbackReceipt.ACCEPTED
+    }
+
 class OAuthManager(private val context: Context, private val tokenStore: TokenStore) {
     private val prefs = context.getSharedPreferences("oauth", Context.MODE_PRIVATE)
     private val clientId = context.getString(R.string.oauth_client_id)
@@ -83,16 +94,18 @@ class OAuthManager(private val context: Context, private val tokenStore: TokenSt
     }
 
     fun receive(uri: Uri): OAuthCallbackReceipt {
-        val expectedState = prefs.getString("state", null) ?: return OAuthCallbackReceipt.NO_PENDING_AUTHORIZATION
+        val expectedState = prefs.getString("state", null)
         val code = uri.getQueryParameter("code")
         val state = uri.getQueryParameter("state")
-        if (code.isNullOrBlank() || state != expectedState) {
+        val receipt = validateOAuthCallback(expectedState, code, state)
+        if (receipt == OAuthCallbackReceipt.INVALID) {
             Log.w("KarooHassOAuth", "Authorization callback was incomplete or did not match the pending sign-in")
             clearCallback()
-            return OAuthCallbackReceipt.INVALID
         }
-        prefs.edit().putString("code", code).putString("callbackState", state).apply()
-        return OAuthCallbackReceipt.ACCEPTED
+        if (receipt == OAuthCallbackReceipt.ACCEPTED) {
+            prefs.edit().putString("code", code).putString("callbackState", state).apply()
+        }
+        return receipt
     }
 
     private fun clearCallback() = prefs.edit().remove("code").remove("callbackState").remove("state").apply()
