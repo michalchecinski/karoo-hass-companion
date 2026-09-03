@@ -236,7 +236,15 @@ internal fun Home(
                                 color = if (entity?.available == false) MaterialTheme.colorScheme.error else MaterialTheme.colorScheme.onSurfaceVariant,
                             )
                         }
-                        if (action.kind in setOf(ActionKind.CONTROL_LOCK, ActionKind.CONTROL_COVER)) {
+                        if (action.kind == ActionKind.SET_COVER_POSITION) {
+                            Text(
+                                stringResource(R.string.quick_access_position_target, action.targetPosition ?: 0),
+                                modifier = Modifier.fillMaxWidth(),
+                                textAlign = TextAlign.Center,
+                                style = MaterialTheme.typography.bodySmall,
+                            )
+                        }
+                        if (action.kind in setOf(ActionKind.CONTROL_LOCK, ActionKind.CONTROL_COVER, ActionKind.SET_COVER_POSITION)) {
                             Text(
                                 when {
                                     actionOutcome != null -> stringResource(actionOutcome.statusResource())
@@ -642,6 +650,7 @@ private fun openOAuthCallback(
     model: MainViewModel,
 ) {
     var selected by remember { mutableStateOf<EntitySnapshot?>(null) }
+    var addingPositionPreset by remember { mutableStateOf(false) }
     var protect by remember { mutableStateOf(false) }
     var confirm by remember { mutableStateOf(false) }
     var query by rememberSaveable { mutableStateOf("") }
@@ -733,10 +742,38 @@ private fun openOAuthCallback(
         }
     }
     selected?.let { entity ->
-        ActionPicker(entity, protect, confirm, { protect = it }, { confirm = it }, { kind ->
-            model.add(entity, kind, protect, confirm)
-            selected = null
-        }, entity.availableActionKinds().any { kind -> hasActionIdentity(state.settings.actions, entity.entityId, kind) }, { selected = null })
+        if (addingPositionPreset) {
+            PositionPresetDialog(
+                entity = entity,
+                alreadyAdded = { target ->
+                    hasActionIdentity(state.settings.actions, entity.entityId, ActionKind.SET_COVER_POSITION, target)
+                },
+                add = { target ->
+                    model.add(entity, ActionKind.SET_COVER_POSITION, protect, confirm, target)
+                    addingPositionPreset = false
+                    selected = null
+                },
+                dismiss = { addingPositionPreset = false },
+            )
+        } else {
+            ActionPicker(
+                entity = entity,
+                protect = protect,
+                confirmation = confirm,
+                setProtect = { protect = it },
+                setConfirmation = { confirm = it },
+                add = { kind ->
+                    if (kind == ActionKind.SET_COVER_POSITION) {
+                        addingPositionPreset = true
+                    } else {
+                        model.add(entity, kind, protect, confirm)
+                        selected = null
+                    }
+                },
+                alreadyAdded = { kind -> hasActionIdentity(state.settings.actions, entity.entityId, kind) },
+                dismiss = { selected = null },
+            )
+        }
     }
 }
 
@@ -748,7 +785,7 @@ internal fun ActionPicker(
     setProtect: (Boolean) -> Unit,
     setConfirmation: (Boolean) -> Unit,
     add: (ActionKind) -> Unit,
-    alreadyAdded: Boolean,
+    alreadyAdded: (ActionKind) -> Boolean,
     dismiss: () -> Unit,
 ) {
     val kinds = entity.availableActionKinds()
@@ -767,6 +804,7 @@ internal fun ActionPicker(
                             singleKind == ActionKind.ACTIVATE_SCENE -> R.string.action_picker_add_scene_activation
                             singleKind == ActionKind.CONTROL_LOCK -> R.string.action_picker_add_lock_control
                             singleKind == ActionKind.CONTROL_COVER -> R.string.action_picker_add_cover_control
+                            singleKind == ActionKind.SET_COVER_POSITION -> R.string.action_picker_add_cover_position
                             else -> R.string.action_picker_choose_operation
                         },
                     ),
@@ -783,18 +821,74 @@ internal fun ActionPicker(
                     if (singleKind == ActionKind.CONTROL_LOCK) Text(stringResource(R.string.action_picker_unlock_always_confirmed), style = MaterialTheme.typography.bodySmall)
                     if (singleKind == ActionKind.CONTROL_COVER) Text(stringResource(R.string.action_picker_open_always_confirmed), style = MaterialTheme.typography.bodySmall)
                 }
-                if (alreadyAdded) Text(stringResource(R.string.action_picker_already_added), color = MaterialTheme.colorScheme.error)
-                if (singleKind == null) kinds.forEach { kind -> TextButton(onClick = { add(kind) }) { Text(stringResource(kind.labelResource())) } }
+                if (singleKind != null && alreadyAdded(singleKind)) Text(stringResource(R.string.action_picker_already_added), color = MaterialTheme.colorScheme.error)
+                if (singleKind == null) {
+                    kinds.forEach { kind ->
+                        TextButton(onClick = { add(kind) }, enabled = !alreadyAdded(kind)) {
+                            Text(stringResource(kind.labelResource()))
+                        }
+                    }
+                }
             }
         },
         confirmButton = {
             if (singleKind != null) {
                 TextButton(
                     onClick = { add(singleKind) },
-                    enabled = !alreadyAdded,
+                    enabled = !alreadyAdded(singleKind),
                     modifier = Modifier.testTag("action-picker-add"),
                 ) { Text(stringResource(R.string.action_picker_add)) }
             }
+        },
+        dismissButton = { TextButton(onClick = dismiss) { Text(stringResource(R.string.action_picker_cancel)) } },
+    )
+}
+
+@Composable
+internal fun PositionPresetDialog(
+    entity: EntitySnapshot,
+    alreadyAdded: (Int) -> Boolean,
+    add: (Int) -> Unit,
+    dismiss: () -> Unit,
+) {
+    var target by remember { mutableStateOf("") }
+    val targetValue = target.toIntOrNull()
+    val invalidTarget = targetValue == null || targetValue !in 1..99
+    val duplicateTarget = targetValue != null && alreadyAdded(targetValue)
+    val error =
+        when {
+            target.isBlank() -> null
+            invalidTarget -> R.string.position_preset_invalid_target
+            duplicateTarget -> R.string.position_preset_duplicate_target
+            else -> null
+        }
+    val validTarget = targetValue?.takeIf { !invalidTarget && !duplicateTarget }
+    AlertDialog(
+        onDismissRequest = dismiss,
+        title = { Text(entity.friendlyName) },
+        text = {
+            Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                Text(stringResource(R.string.position_preset_explanation))
+                OutlinedTextField(
+                    value = target,
+                    onValueChange = { target = it },
+                    label = { Text(stringResource(R.string.position_preset_target_label)) },
+                    suffix = { Text("%") },
+                    singleLine = true,
+                    isError = error != null,
+                    keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number, imeAction = ImeAction.Done),
+                    keyboardActions = KeyboardActions(onDone = { validTarget?.let(add) }),
+                    modifier = Modifier.fillMaxWidth().testTag("position-preset-target"),
+                )
+                error?.let { Text(stringResource(it), color = MaterialTheme.colorScheme.error) }
+            }
+        },
+        confirmButton = {
+            TextButton(
+                onClick = { validTarget?.let(add) },
+                enabled = validTarget != null,
+                modifier = Modifier.testTag("position-preset-add"),
+            ) { Text(stringResource(R.string.action_picker_add)) }
         },
         dismissButton = { TextButton(onClick = dismiss) { Text(stringResource(R.string.action_picker_cancel)) } },
     )
@@ -808,6 +902,7 @@ private fun ActionKind.labelResource() =
         ActionKind.ACTIVATE_SCENE -> R.string.action_kind_activate
         ActionKind.CONTROL_LOCK -> R.string.action_kind_control_lock
         ActionKind.CONTROL_COVER -> R.string.action_kind_control_cover
+        ActionKind.SET_COVER_POSITION -> R.string.action_kind_set_cover_position
         ActionKind.TOGGLE -> R.string.action_kind_toggle
     }
 

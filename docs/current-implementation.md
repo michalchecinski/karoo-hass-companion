@@ -63,6 +63,11 @@ useful record of the intended scope but does not capture all later UX changes.
 - Lock and cover tiles show a readable current state plus the operation a tap
   will request. Transitional or jammed locks, unsupported cover directions,
   and unavailable entities explain why no action can currently be sent.
+- Cover tiles show Home Assistant's reported whole position when available.
+  Position-capable covers can also have multiple separately configured 1–99%
+  preset tiles. A preset refreshes state before it runs, always confirms a move
+  toward open, and reports an accepted request as **Requested** while polling
+  only to refresh its displayed state and position.
 - Tiles can be PIN-protected in selected-actions PIN mode. Tiles are disabled
   while an entity refresh or action request is in progress.
 - If Karoo opens without Wi-Fi, configured Quick Access controls automatically

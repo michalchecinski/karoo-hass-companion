@@ -12,7 +12,7 @@ enum class OnboardingStep {
     COMPLETE,
 }
 
-enum class ActionKind { RUN_SCRIPT, PRESS_BUTTON, ACTIVATE_SCENE, CONTROL_LOCK, CONTROL_COVER, TOGGLE }
+enum class ActionKind { RUN_SCRIPT, PRESS_BUTTON, ACTIVATE_SCENE, CONTROL_LOCK, CONTROL_COVER, SET_COVER_POSITION, TOGGLE }
 
 enum class ActionOutcome { SENDING, REQUESTED, COMPLETED, FAILED, UNKNOWN }
 
@@ -26,13 +26,19 @@ data class QuickAccessAction(
     val icon: String? = null,
     val order: Long = 0,
     val displayName: String? = null,
+    val targetPosition: Int? = null,
 )
 
 fun hasActionIdentity(
     actions: Collection<QuickAccessAction>,
     entityId: String,
     kind: ActionKind,
-) = actions.any { it.entityId == entityId && it.kind == kind }
+    targetPosition: Int? = null,
+) = actions.any {
+    it.entityId == entityId &&
+        it.kind == kind &&
+        (kind != ActionKind.SET_COVER_POSITION || it.targetPosition == targetPosition)
+}
 
 data class ResolvedAction(
     val action: QuickAccessAction,
@@ -43,6 +49,7 @@ data class ResolvedAction(
     val completesOnStateChange: Boolean = false,
     val refreshAfterRequest: Boolean = false,
     val mandatoryConfirmation: Boolean = false,
+    val targetPosition: Int? = null,
 ) {
     val requiresConfirmation: Boolean
         get() = mandatoryConfirmation || action.requiresConfirmation
@@ -60,6 +67,7 @@ data class EntitySnapshot(
     val lastUpdated: String? = null,
     val friendlyName: String,
     val icon: String? = null,
+    val currentPosition: Int? = null,
     val fetchedAt: Long = System.currentTimeMillis(),
 )
 
@@ -79,7 +87,11 @@ fun EntitySnapshot.availableActionKinds(): List<ActionKind> =
         "button" -> listOf(ActionKind.PRESS_BUTTON)
         "scene" -> listOf(ActionKind.ACTIVATE_SCENE)
         "lock" -> listOf(ActionKind.CONTROL_LOCK)
-        "cover" -> if (supportedFeatures and COVER_DIRECTIONAL_FEATURES != 0) listOf(ActionKind.CONTROL_COVER) else emptyList()
+        "cover" ->
+            buildList {
+                if (supportedFeatures and COVER_DIRECTIONAL_FEATURES != 0) add(ActionKind.CONTROL_COVER)
+                if (supportedFeatures and COVER_SUPPORT_SET_POSITION != 0) add(ActionKind.SET_COVER_POSITION)
+            }
         "light", "switch" -> listOf(ActionKind.TOGGLE)
         else -> emptyList()
     }
@@ -99,9 +111,12 @@ fun QuickAccessAction.resolve(entity: EntitySnapshot?): ResolvedAction? =
             )
         ActionKind.CONTROL_LOCK -> resolveLock(entity)
         ActionKind.CONTROL_COVER -> resolveCover(entity)
+        ActionKind.SET_COVER_POSITION -> resolveCoverPosition(entity)
     }
 
 fun QuickAccessAction.label(entity: EntitySnapshot? = null): String {
+    val name = entity?.friendlyName ?: displayName ?: entityId
+    if (kind == ActionKind.SET_COVER_POSITION) return "$name • ${targetPosition ?: "?"}%"
     val operation =
         when (kind) {
             ActionKind.RUN_SCRIPT -> "Run"
@@ -109,8 +124,9 @@ fun QuickAccessAction.label(entity: EntitySnapshot? = null): String {
             ActionKind.ACTIVATE_SCENE -> "Activate"
             ActionKind.TOGGLE -> "Toggle"
             ActionKind.CONTROL_LOCK, ActionKind.CONTROL_COVER -> null
+            ActionKind.SET_COVER_POSITION -> null
         }
-    return listOfNotNull(operation, entity?.friendlyName ?: displayName ?: entityId).joinToString(" ")
+    return listOfNotNull(operation, name).joinToString(" ")
 }
 
 fun EntitySnapshot.displayState(): String =
@@ -128,29 +144,34 @@ fun EntitySnapshot.displayState(): String =
                 "unavailable" -> "Unavailable"
                 else -> state.toReadableState()
             }
-        "cover" ->
-            when (state) {
-                "open" -> "Open"
-                "closed" -> "Closed"
-                "opening" -> "Opening…"
-                "closing" -> "Closing…"
-                "unknown" -> "Unknown"
-                "unavailable" -> "Unavailable"
-                else -> state.toReadableState()
-            }
+        "cover" -> {
+            val label =
+                when (state) {
+                    "open" -> "Open"
+                    "closed" -> "Closed"
+                    "opening" -> "Opening…"
+                    "closing" -> "Closing…"
+                    "unknown" -> "Unknown"
+                    "unavailable" -> "Unavailable"
+                    else -> state.toReadableState()
+                }
+            currentPosition?.let { "$label • $it%" } ?: label
+        }
         else -> state
     }
 
 fun QuickAccessAction.actionHint(entity: EntitySnapshot?): String {
     val resolved = resolve(entity)
     return when {
-        kind !in setOf(ActionKind.CONTROL_LOCK, ActionKind.CONTROL_COVER) -> ""
+        kind !in setOf(ActionKind.CONTROL_LOCK, ActionKind.CONTROL_COVER, ActionKind.SET_COVER_POSITION) -> ""
         entity == null -> "State unavailable"
         !entity.available -> "Action unavailable"
         resolved != null -> "Tap to ${resolved.operationLabel.lowercase()}"
         kind == ActionKind.CONTROL_LOCK && entity.state in LOCK_TRANSITIONAL_STATES -> "Wait until movement finishes"
         kind == ActionKind.CONTROL_COVER && entity.state in COVER_TRANSITIONAL_STATES && entity.supportedFeatures and COVER_SUPPORT_STOP == 0 -> "Wait until movement finishes"
         kind == ActionKind.CONTROL_COVER && entity.state in setOf("open", "closed") -> "Action unsupported"
+        kind == ActionKind.SET_COVER_POSITION && entity.currentPosition == null -> "Position unavailable"
+        kind == ActionKind.SET_COVER_POSITION && entity.supportedFeatures and COVER_SUPPORT_SET_POSITION == 0 -> "Action unsupported"
         else -> "Action unavailable"
     }
 }
@@ -191,11 +212,35 @@ private fun QuickAccessAction.resolveCover(entity: EntitySnapshot?): ResolvedAct
     }
 }
 
+private fun QuickAccessAction.resolveCoverPosition(entity: EntitySnapshot?): ResolvedAction? {
+    val target = targetPosition ?: return null
+    if (
+        entity == null ||
+        entity.domain != "cover" ||
+        !entity.available ||
+        entity.currentPosition == null ||
+        target !in 1..99 ||
+        entity.supportedFeatures and COVER_SUPPORT_SET_POSITION == 0
+    ) {
+        return null
+    }
+    return ResolvedAction(
+        action = this,
+        serviceName = "set_cover_position",
+        operationLabel = "Set to $target%",
+        startingState = entity.state,
+        refreshAfterRequest = true,
+        mandatoryConfirmation = target > entity.currentPosition,
+        targetPosition = target,
+    )
+}
+
 private fun String.toReadableState(): String =
     replace('_', ' ').replaceFirstChar { character -> character.titlecase() }
 
 private const val COVER_SUPPORT_OPEN = 1
 private const val COVER_SUPPORT_CLOSE = 2
+private const val COVER_SUPPORT_SET_POSITION = 4
 private const val COVER_SUPPORT_STOP = 8
 private const val COVER_DIRECTIONAL_FEATURES = COVER_SUPPORT_OPEN or COVER_SUPPORT_CLOSE or COVER_SUPPORT_STOP
 private val LOCK_TRANSITIONAL_STATES = setOf("locking", "unlocking", "opening")

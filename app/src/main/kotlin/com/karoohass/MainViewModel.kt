@@ -465,24 +465,26 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
         kind: ActionKind,
         protected: Boolean,
         confirm: Boolean,
+        targetPosition: Int? = null,
     ) =
         viewModelScope.launch {
             var completedOnboarding = false
             settingsStore.update { old ->
-                if (hasActionIdentity(old.actions, entity.entityId, kind)) {
+                if (hasActionIdentity(old.actions, entity.entityId, kind, targetPosition)) {
                     old
                 } else {
                     val action =
                         QuickAccessAction(
-                            UUID.randomUUID().toString(),
-                            entity.entityId,
-                            entity.domain,
-                            kind,
-                            protected,
-                            confirm,
-                            entity.icon,
-                            (old.actions.maxOfOrNull { a -> a.order } ?: -1) + 1,
-                            entity.friendlyName,
+                            id = UUID.randomUUID().toString(),
+                            entityId = entity.entityId,
+                            domain = entity.domain,
+                            kind = kind,
+                            protected = protected,
+                            requiresConfirmation = confirm,
+                            icon = entity.icon,
+                            order = (old.actions.maxOfOrNull { a -> a.order } ?: -1) + 1,
+                            displayName = entity.friendlyName,
+                            targetPosition = targetPosition,
                         )
                     completedOnboarding = old.onboardingStep == OnboardingStep.FIRST_ACTION
                     old.copy(
@@ -532,7 +534,7 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
             outcome.value = null
             message.value = null
             var snapshot = snapshots.value[action.entityId]
-            val mustRefresh = action.kind in setOf(ActionKind.CONTROL_LOCK, ActionKind.CONTROL_COVER)
+            val mustRefresh = action.kind in setOf(ActionKind.CONTROL_LOCK, ActionKind.CONTROL_COVER, ActionKind.SET_COVER_POSITION)
             val refreshIfStale = action.kind == ActionKind.TOGGLE && (snapshot == null || System.currentTimeMillis() - snapshot.fetchedAt > 60_000)
             if (mustRefresh || refreshIfStale) {
                 val refreshed = runCatching { repository.refresh(action.entityId) }.getOrNull()
@@ -633,13 +635,24 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
                 outcome.value = ActionOutcome.SENDING
                 val requested = repository.execute(resolved)
                 outcome.value = requested
+                val updateSnapshot: (EntitySnapshot) -> Unit = { snapshot ->
+                    snapshots.value = snapshots.value + (action.entityId to snapshot)
+                }
                 val updated =
                     when {
-                        requested == ActionOutcome.SENDING && resolved.expectedState != null -> repository.awaitState(action.entityId) { it.state == resolved.expectedState }
-                        requested == ActionOutcome.REQUESTED && resolved.completesOnStateChange -> repository.awaitState(action.entityId) { resolved.startingState == null || it.state != resolved.startingState }
+                        requested == ActionOutcome.SENDING && resolved.expectedState != null ->
+                            repository.awaitState(action.entityId, { it.state == resolved.expectedState }, updateSnapshot)
+                        requested == ActionOutcome.REQUESTED && resolved.completesOnStateChange ->
+                            repository.awaitState(action.entityId, { resolved.startingState == null || it.state != resolved.startingState }, updateSnapshot)
                         requested == ActionOutcome.REQUESTED && resolved.refreshAfterRequest ->
-                            repository.awaitState(action.entityId) { resolved.startingState == null || it.state != resolved.startingState }
-                                ?: repository.refresh(action.entityId)
+                            repository.awaitState(
+                                action.entityId,
+                                {
+                                    resolved.targetPosition?.let { target -> it.currentPosition == target }
+                                        ?: (resolved.startingState == null || it.state != resolved.startingState)
+                                },
+                                updateSnapshot,
+                            ) ?: repository.refresh(action.entityId)?.also(updateSnapshot)
                         else -> null
                     }
                 if (updated != null) {

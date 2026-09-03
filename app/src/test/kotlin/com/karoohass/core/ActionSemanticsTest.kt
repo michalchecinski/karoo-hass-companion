@@ -49,6 +49,17 @@ class ActionSemanticsTest {
         assertEquals(emptyList<ActionKind>(), snapshot("cover.read_only", "closed").availableActionKinds())
     }
 
+    @Test fun `position-capable cover exposes a separate preset action`() {
+        assertEquals(
+            listOf(ActionKind.CONTROL_COVER, ActionKind.SET_COVER_POSITION),
+            snapshot("cover.shade", "open", features = COVER_OPEN or COVER_SET_POSITION).availableActionKinds(),
+        )
+        assertEquals(
+            listOf(ActionKind.SET_COVER_POSITION),
+            snapshot("cover.shade", "open", features = COVER_SET_POSITION).availableActionKinds(),
+        )
+    }
+
     @Test fun `closed and open covers resolve using supported features`() {
         val control = action(ActionKind.CONTROL_COVER, "cover.garage")
         val open = control.resolve(snapshot("cover.garage", "closed", features = COVER_OPEN or COVER_CLOSE))!!
@@ -87,6 +98,31 @@ class ActionSemanticsTest {
         assertNull(control.resolve(snapshot("cover.garage", "opening", features = COVER_OPEN or COVER_CLOSE)))
     }
 
+    @Test fun `cover preset resolves with target payload and direction-aware confirmation`() {
+        val preset = action(ActionKind.SET_COVER_POSITION, "cover.garage", targetPosition = 60)
+
+        val opening = preset.resolve(snapshot("cover.garage", "opening", features = COVER_SET_POSITION, currentPosition = 40))!!
+        assertEquals("set_cover_position", opening.serviceName)
+        assertEquals("Set to 60%", opening.operationLabel)
+        assertEquals(60, opening.targetPosition)
+        assertTrue(opening.refreshAfterRequest)
+        assertTrue(opening.requiresConfirmation)
+
+        val closing =
+            preset.copy(targetPosition = 20, requiresConfirmation = false)
+                .resolve(snapshot("cover.garage", "closing", features = COVER_SET_POSITION, currentPosition = 40))!!
+        assertFalse(closing.requiresConfirmation)
+    }
+
+    @Test fun `cover preset requires a valid reported position and capability`() {
+        val preset = action(ActionKind.SET_COVER_POSITION, "cover.garage", targetPosition = 50)
+
+        assertNull(preset.resolve(snapshot("cover.garage", "open", features = COVER_SET_POSITION)))
+        assertNull(preset.resolve(snapshot("cover.garage", "open", currentPosition = 40)))
+        assertNull(preset.copy(targetPosition = 100).resolve(snapshot("cover.garage", "open", features = COVER_SET_POSITION, currentPosition = 40)))
+        assertEquals("Position unavailable", preset.actionHint(snapshot("cover.garage", "open", features = COVER_SET_POSITION)))
+    }
+
     @Test fun `state labels and action hints are readable`() {
         val lock = action(ActionKind.CONTROL_LOCK, "lock.front_door")
         val cover = action(ActionKind.CONTROL_COVER, "cover.garage")
@@ -97,6 +133,7 @@ class ActionSemanticsTest {
         assertEquals("Jammed", snapshot("lock.front_door", "jammed").displayState())
         assertEquals("Action unavailable", lock.actionHint(snapshot("lock.front_door", "jammed")))
         assertEquals("Closing…", snapshot("cover.garage", "closing", features = COVER_STOP).displayState())
+        assertEquals("Open • 50%", snapshot("cover.garage", "open", currentPosition = 50).displayState())
         assertEquals("Tap to stop", cover.actionHint(snapshot("cover.garage", "closing", features = COVER_STOP)))
         assertEquals("Wait until movement finishes", cover.actionHint(snapshot("cover.garage", "closing", features = COVER_OPEN or COVER_CLOSE)))
         assertEquals("Action unsupported", cover.actionHint(snapshot("cover.garage", "closed", features = COVER_CLOSE)))
@@ -157,10 +194,19 @@ class ActionSemanticsTest {
         assertFalse(hasActionIdentity(actions, "button.other_remote", ActionKind.PRESS_BUTTON))
     }
 
+    @Test fun `position preset identity includes its target`() {
+        val actions = listOf(action(ActionKind.SET_COVER_POSITION, "cover.garage", targetPosition = 25))
+
+        assertTrue(hasActionIdentity(actions, "cover.garage", ActionKind.SET_COVER_POSITION, 25))
+        assertFalse(hasActionIdentity(actions, "cover.garage", ActionKind.SET_COVER_POSITION, 75))
+        assertEquals("Test entity • 25%", actions.single().label())
+    }
+
     private fun action(
         kind: ActionKind,
         entityId: String,
         confirm: Boolean = false,
+        targetPosition: Int? = null,
     ) = QuickAccessAction(
         id = "action-id",
         entityId = entityId,
@@ -168,12 +214,14 @@ class ActionSemanticsTest {
         kind = kind,
         requiresConfirmation = confirm,
         displayName = "Test entity",
+        targetPosition = targetPosition,
     )
 
     private fun snapshot(
         entityId: String,
         state: String,
         features: Int = 0,
+        currentPosition: Int? = null,
     ) = EntitySnapshot(
         entityId = entityId,
         domain = entityId.substringBefore('.'),
@@ -181,11 +229,13 @@ class ActionSemanticsTest {
         supportedFeatures = features,
         available = state !in setOf("unknown", "unavailable"),
         friendlyName = "Test entity",
+        currentPosition = currentPosition,
     )
 
     private companion object {
         const val COVER_OPEN = 1
         const val COVER_CLOSE = 2
+        const val COVER_SET_POSITION = 4
         const val COVER_STOP = 8
     }
 }
