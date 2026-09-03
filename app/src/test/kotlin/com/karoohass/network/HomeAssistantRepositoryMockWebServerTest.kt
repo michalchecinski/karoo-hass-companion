@@ -2,6 +2,7 @@ package com.karoohass.network
 
 import com.karoohass.core.ActionKind
 import com.karoohass.core.ActionOutcome
+import com.karoohass.core.EntitySnapshot
 import com.karoohass.core.QuickAccessAction
 import com.karoohass.core.resolve
 import com.karoohass.security.Tokens
@@ -11,6 +12,7 @@ import kotlinx.coroutines.withContext
 import okhttp3.mockwebserver.MockResponse
 import okhttp3.mockwebserver.MockWebServer
 import okhttp3.mockwebserver.SocketPolicy
+import org.json.JSONObject
 import org.junit.After
 import org.junit.Assert.assertEquals
 import org.junit.Before
@@ -58,6 +60,52 @@ class HomeAssistantRepositoryMockWebServerTest {
             assertEquals("POST", request.method)
             assertEquals("/api/services/scene/turn_on", request.path)
             assertEquals("{\"entity_id\":\"scene.arrive_home\"}", request.body.readUtf8())
+        }
+
+    @Test
+    fun `cover preset posts the requested absolute position`() =
+        runBlocking {
+            server.enqueue(MockResponse().setResponseCode(200).setBody("[]"))
+            val action =
+                QuickAccessAction(
+                    id = "id",
+                    entityId = "cover.garage",
+                    domain = "cover",
+                    kind = ActionKind.SET_COVER_POSITION,
+                    targetPosition = 55,
+                )
+            val entity =
+                EntitySnapshot(
+                    entityId = "cover.garage",
+                    domain = "cover",
+                    state = "opening",
+                    supportedFeatures = 4,
+                    available = true,
+                    friendlyName = "Garage",
+                    currentPosition = 40,
+                )
+
+            assertEquals(ActionOutcome.REQUESTED, repository().execute(action.resolve(entity)!!))
+
+            val request = server.takeRequest()
+            assertEquals("POST", request.method)
+            assertEquals("/api/services/cover/set_cover_position", request.path)
+            val payload = JSONObject(request.body.readUtf8())
+            assertEquals("cover.garage", payload.getString("entity_id"))
+            assertEquals(55, payload.getInt("position"))
+        }
+
+    @Test
+    fun `position polling reports each successful cover update`() =
+        runBlocking {
+            server.enqueue(coverState(20))
+            server.enqueue(coverState(55))
+            val updates = mutableListOf<Int?>()
+
+            val reached = repository().awaitState("cover.garage", { it.currentPosition == 55 }) { updates += it.currentPosition }
+
+            assertEquals(55, reached?.currentPosition)
+            assertEquals(listOf(20, 55), updates)
         }
 
     @Test
@@ -124,6 +172,11 @@ class HomeAssistantRepositoryMockWebServerTest {
         entityId: String,
     ) =
         QuickAccessAction("id", entityId, entityId.substringBefore('.'), kind).resolve(null)!!
+
+    private fun coverState(position: Int) =
+        MockResponse()
+            .setResponseCode(200)
+            .setBody("{\"entity_id\":\"cover.garage\",\"state\":\"opening\",\"attributes\":{\"current_position\":$position}}")
 
     private class UrlConnectionTransport : HttpTransport {
         override suspend fun execute(request: HttpRequest): HttpResponse =

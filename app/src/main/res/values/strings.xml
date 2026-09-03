@@ -14,6 +14,7 @@
     <string name="action_picker_add_scene_activation">Add a scene activation.</string>
     <string name="action_picker_add_lock_control">Add a state-aware lock control.</string>
     <string name="action_picker_add_cover_control">Add a state-aware cover control.</string>
+    <string name="action_picker_add_cover_position">Add a cover position preset.</string>
     <string name="action_picker_choose_operation">Choose operation</string>
     <string name="action_picker_require_pin">Require PIN</string>
     <string name="action_picker_confirm_action">Confirm action</string>
@@ -27,6 +28,7 @@
     <string name="action_kind_activate">Activate</string>
     <string name="action_kind_control_lock">Control lock</string>
     <string name="action_kind_control_cover">Control cover</string>
+    <string name="action_kind_set_cover_position">Add position preset</string>
     <string name="action_kind_toggle">Toggle</string>
     <string name="connection_notice_wifi_unavailable_title">No Wi-Fi connection</string>
     <string name="connection_notice_wifi_unavailable_message">Connect the Karoo to Wi-Fi, then try again.</string>
@@ -39,9 +41,14 @@
     <string name="quick_access_state_unavailable">State unavailable</string>
     <string name="quick_access_checking_state">Checking state…</string>
     <string name="quick_access_pin_protected">PIN protected</string>
+    <string name="quick_access_position_target">Target: %1$d%%</string>
     <string name="quick_access_sending">Sending…</string>
     <string name="quick_access_requested">Requested</string>
     <string name="quick_access_completed">Completed</string>
     <string name="quick_access_failed">Failed</string>
     <string name="quick_access_outcome_uncertain">Outcome uncertain</string>
+    <string name="position_preset_explanation" formatted="false">Choose a whole target position from 1% to 99%.</string>
+    <string name="position_preset_target_label">Target position</string>
+    <string name="position_preset_invalid_target">Enter a whole number from 1 to 99.</string>
+    <string name="position_preset_duplicate_target">This target is already in Quick Access.</string>
 </resources>
