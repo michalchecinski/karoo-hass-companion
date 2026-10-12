@@ -117,6 +117,8 @@ useful record of the intended scope but does not capture all later UX changes.
   requests the numeric password keyboard after the window and input session
   are ready. This also applies when returning to a locked app or retrying an
   incorrect PIN. See [PIN keyboard](features/pin-keyboard.md).
+- The PIN layout keeps its field and Unlock button above the keyboard and can
+  scroll when additional action text needs more room.
 - An incorrect unlock attempt immediately clears the masked input. A later
   successful unlock clears the prior error message.
 - Disabling protection requires verification of the current PIN, clears the
