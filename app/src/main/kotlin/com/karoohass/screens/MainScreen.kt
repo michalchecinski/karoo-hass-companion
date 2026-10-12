@@ -48,13 +48,19 @@ import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
+import androidx.compose.runtime.withFrameNanos
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.focus.FocusRequester
+import androidx.compose.ui.focus.focusRequester
+import androidx.compose.ui.platform.LocalSoftwareKeyboardController
+import androidx.compose.ui.platform.LocalWindowInfo
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.res.stringResource
@@ -819,6 +825,19 @@ private fun ActionKind.labelResource() =
     model: MainViewModel,
 ) {
     var pin by remember { mutableStateOf("") }
+    val focusRequester = remember { FocusRequester() }
+    val keyboard = LocalSoftwareKeyboardController.current
+    val windowFocused = LocalWindowInfo.current.isWindowFocused
+    LaunchedEffect(windowFocused, state.unlocking) {
+        if (windowFocused && !state.unlocking) {
+            // Wait for the enabled field to attach, then for its input session
+            // to start. An IME request before window/editor focus can be ignored.
+            withFrameNanos { }
+            focusRequester.requestFocus()
+            withFrameNanos { }
+            keyboard?.show()
+        }
+    }
     val unlock = {
         if (pin.length in 4..6) {
             model.submitPin(pin)
@@ -830,6 +849,7 @@ private fun ActionKind.labelResource() =
         OutlinedTextField(
             value = pin,
             onValueChange = { pin = it.filter(Char::isDigit).take(6) },
+            modifier = Modifier.focusRequester(focusRequester),
             singleLine = true,
             visualTransformation = PasswordVisualTransformation(),
             keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.NumberPassword, imeAction = ImeAction.Done),

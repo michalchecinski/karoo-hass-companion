@@ -18,12 +18,25 @@ The emulator's Android keyboard can verify this API behavior. It cannot certify
 the keyboard bundled with Karoo firmware; physical Karoo validation remains a
 separate acceptance check.
 
-## Regression
+## Behavior
 
-The unlock screen currently creates a masked numeric-password field without
-requesting its focus or showing the keyboard. An instrumentation test launches
-the real activity with an isolated whole-app PIN configuration and checks focus
-and Android IME visibility without tapping the field.
+Opening the unlock screen automatically focuses the masked PIN field and opens
+the numeric password keyboard. It waits for a focused window, then a composition
+frame to attach the enabled field, requests editor focus, and waits another
+frame before requesting the keyboard through Compose's keyboard controller.
+
+The request runs when the window gains focus or PIN verification finishes with
+the unlock screen still present. Ordinary text edits and other recompositions
+do not repeat it, so dismissing the keyboard remains possible. It does not use
+a forced keyboard flag, a fixed delay, or a polling loop. Existing PIN length,
+masking, lockouts, and Done-to-unlock behavior remain in place.
+
+## Regression verification
+
+Before the fix, an instrumentation test launching the real activity failed
+because the PIN field was not focused. After the fix, the same test passed both
+the focus assertion and Android IME visibility check without tapping the field
+on the 480×800 Karoo AVD (Android 16 / API 36).
 
 Test data uses only `https://demo.example.com`, no Home Assistant credentials,
 and a local test PIN. No live Home Assistant installation is required.
