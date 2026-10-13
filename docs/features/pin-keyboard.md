@@ -35,6 +35,10 @@ The activity explicitly requests Android's `adjustResize` keyboard behavior.
 The PIN layout respects the IME inset and uses compact vertical spacing so the
 field and Unlock button remain visible with the keyboard at Karoo resolution.
 It can scroll when pending-action text or a larger keyboard needs more space.
+Incorrect-PIN and lockout feedback is rendered once inside this scrollable
+layout, below Unlock. Compact spacing keeps a one-line error visible with the
+keyboard open; longer messages can scroll. The screen-level message overlay is
+suppressed on PIN entry so it cannot cover the input or Unlock button.
 
 ## Regression verification
 
@@ -49,6 +53,8 @@ Done, keyboard dismissal across an unrelated recomposition, and visibility of
 the field and Unlock button while the IME is open. The selected-action test
 invokes the real ViewModel route directly because the isolated account has no
 live connection; it does not send a Home Assistant action.
+The retry test also checks that incorrect-PIN feedback appears exactly once,
+is visible, and does not intersect the input or Unlock button.
 
 A normal cold launch outside the test runner was also checked: Android reported
 `mInputShown=true`, numeric-password `inputType=0x12`, and Done IME action

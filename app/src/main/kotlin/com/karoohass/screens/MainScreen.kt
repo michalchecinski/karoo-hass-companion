@@ -154,7 +154,9 @@ fun MainScreen(
                     Text("Done")
                 }
             }
-            if (displayedScreen != Screen.SETUP) state.message?.let { Text(it, Modifier.align(Alignment.BottomCenter).padding(12.dp), color = MaterialTheme.colorScheme.error) }
+            if (displayedScreen != Screen.SETUP && displayedScreen != Screen.PIN) {
+                state.message?.let { Text(it, Modifier.align(Alignment.BottomCenter).padding(12.dp), color = MaterialTheme.colorScheme.error) }
+            }
         }
     }
     state.confirmation?.takeIf { displayedScreen == Screen.HOME }?.let { resolved ->
@@ -848,7 +850,7 @@ private fun ActionKind.labelResource() =
         }
     }
     Column(
-        Modifier.fillMaxSize().imePadding().verticalScroll(rememberScrollState()).padding(horizontal = 24.dp, vertical = 12.dp),
+        Modifier.fillMaxSize().imePadding().verticalScroll(rememberScrollState()).padding(horizontal = 24.dp, vertical = 8.dp),
         verticalArrangement = Arrangement.Center,
         horizontalAlignment = Alignment.CenterHorizontally,
     ) {
@@ -864,6 +866,15 @@ private fun ActionKind.labelResource() =
             enabled = !state.unlocking,
         )
         Button(onClick = unlock, enabled = pin.length in 4..6 && !state.unlocking) { Text("Unlock") }
+        state.message?.let {
+            Text(
+                it,
+                modifier = Modifier.padding(top = 4.dp),
+                color = MaterialTheme.colorScheme.error,
+                style = MaterialTheme.typography.bodySmall,
+                textAlign = TextAlign.Center,
+            )
+        }
         if (state.unlocking) CircularProgressIndicator(Modifier.padding(top = 16.dp))
         state.pending?.let { Text(it.confirmationLabel(state.snapshots[it.action.entityId])) }
     }

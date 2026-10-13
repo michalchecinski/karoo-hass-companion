@@ -2,6 +2,7 @@ package com.karoohass.screens
 
 import android.graphics.Rect
 import android.view.KeyEvent
+import androidx.compose.ui.test.assertCountEquals
 import androidx.compose.ui.test.assertIsDisplayed
 import androidx.compose.ui.test.assertIsFocused
 import androidx.compose.ui.test.assertIsNotEnabled
@@ -107,6 +108,16 @@ class PinScreenKeyboardTest {
             composeRule.onAllNodesWithText("Incorrect PIN").fetchSemanticsNodes().isNotEmpty()
         }
         assertReadyForPin()
+        composeRule.onAllNodesWithText("Incorrect PIN").assertCountEquals(1)
+        composeRule.waitUntil(5_000) {
+            runCatching { composeRule.onNodeWithText("Incorrect PIN").assertIsDisplayed() }.isSuccess
+        }
+        composeRule.onNodeWithText("Incorrect PIN").assertIsDisplayed()
+        val feedbackBounds = composeRule.onNodeWithText("Incorrect PIN").fetchSemanticsNode().boundsInWindow
+        val buttonBounds = composeRule.onNodeWithText("Unlock").fetchSemanticsNode().boundsInWindow
+        val fieldBounds = composeRule.onNode(hasSetTextAction()).fetchSemanticsNode().boundsInWindow
+        assertFalse("PIN feedback must not cover Unlock", feedbackBounds.overlaps(buttonBounds))
+        assertFalse("PIN feedback must not cover the input", feedbackBounds.overlaps(fieldBounds))
         composeRule.onNodeWithText("Unlock").assertIsNotEnabled()
         composeRule.onNode(hasSetTextAction()).performTextInput("1234")
         composeRule.onNode(hasSetTextAction()).performImeAction()

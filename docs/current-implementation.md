@@ -121,6 +121,8 @@ useful record of the intended scope but does not capture all later UX changes.
   scroll when additional action text needs more room.
 - An incorrect unlock attempt immediately clears the masked input. A later
   successful unlock clears the prior error message.
+- Incorrect-PIN and lockout feedback sits below Unlock inside the scrollable
+  PIN layout, so it does not overlap the field or button with the keyboard open.
 - Disabling protection requires verification of the current PIN, clears the
   verifier only after success, and confirms the result inline in Settings.
 - Whole-app PIN protection prevents entity-state traffic and Quick Access
