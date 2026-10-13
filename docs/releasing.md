@@ -2,6 +2,15 @@
 
 Karoo Home Assistant Companion releases are built, signed, reviewed, and published by `.github/workflows/release.yml`. Do not create release tags or upload APKs manually.
 
+## Shared build environment
+
+Pull-request CI and release builds use `.github/workflows/_build.yml` with JDK 17.
+Android SDK setup explicitly installs `platform-tools`, `platforms;android-34`,
+and `build-tools;34.0.0`, matching the app's current compile SDK and Android
+Gradle Plugin requirements. This overrides the setup action's default request
+for the removed legacy `tools` package, which fails before Gradle starts.
+Keep this package list aligned if the project's SDK requirements change.
+
 ## Versioning and changelog
 
 Every pull request must have exactly one version label:

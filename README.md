@@ -36,6 +36,7 @@ Assistant traffic.
 ![Button action picker](screenshots/emulator-karoo-480x800/button-action-picker-app-only.png)
 ![Set up Home Assistant](screenshots/emulator-karoo-480x800/onboarding-app-only.png)
 ![Settings](screenshots/emulator-karoo-480x800/settings-connected-app-only.png)
+![PIN entry with numeric keyboard](screenshots/emulator-karoo-480x800/pin-keyboard-app-only.png)
 
 ## Installation
 

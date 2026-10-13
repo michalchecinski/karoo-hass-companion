@@ -113,8 +113,16 @@ useful record of the intended scope but does not capture all later UX changes.
 - PIN setup, disabling, and unlock verification run outside the UI thread.
   Each operation disables its controls and shows an in-progress spinner.
 - The keyboard Done/confirm action submits a valid unlock PIN.
+- Opening the unlock screen automatically focuses its masked PIN field and
+  requests the numeric password keyboard after the window and input session
+  are ready. This also applies when returning to a locked app or retrying an
+  incorrect PIN. See [PIN keyboard](features/pin-keyboard.md).
+- The PIN layout keeps its field and Unlock button above the keyboard and can
+  scroll when additional action text needs more room.
 - An incorrect unlock attempt immediately clears the masked input. A later
   successful unlock clears the prior error message.
+- Incorrect-PIN and lockout feedback sits below Unlock inside the scrollable
+  PIN layout, so it does not overlap the field or button with the keyboard open.
 - Disabling protection requires verification of the current PIN, clears the
   verifier only after success, and confirms the result inline in Settings.
 - Whole-app PIN protection prevents entity-state traffic and Quick Access
