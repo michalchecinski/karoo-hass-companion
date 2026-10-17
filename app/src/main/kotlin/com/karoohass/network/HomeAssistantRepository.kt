@@ -35,7 +35,11 @@ class HomeAssistantRepository(
                 request(
                     "POST",
                     "/api/services/${action.action.domain}/${action.serviceName}",
-                    JSONObject().put("entity_id", action.action.entityId).toString().toByteArray(),
+                    JSONObject()
+                        .put("entity_id", action.action.entityId)
+                        .apply { action.targetPosition?.let { put("position", it) } }
+                        .toString()
+                        .toByteArray(),
                 )
             } catch (_: TransportException) {
                 return ActionOutcome.UNKNOWN
@@ -59,18 +63,22 @@ class HomeAssistantRepository(
 
     suspend fun verify(action: ResolvedAction): ActionOutcome {
         val expected = action.expectedState ?: return ActionOutcome.REQUESTED
-        return if (awaitState(action.action.entityId) { it.state == expected } != null) ActionOutcome.COMPLETED else ActionOutcome.UNKNOWN
+        return if (awaitState(action.action.entityId, { it.state == expected }) != null) ActionOutcome.COMPLETED else ActionOutcome.UNKNOWN
     }
 
     suspend fun awaitState(
         entityId: String,
         matches: (EntitySnapshot) -> Boolean,
+        onSnapshot: (EntitySnapshot) -> Unit = {},
     ): EntitySnapshot? {
         repeat(8) {
-            refresh(entityId)?.let { snapshot -> if (matches(snapshot)) return snapshot }
+            refresh(entityId)?.let { snapshot ->
+                onSnapshot(snapshot)
+                if (matches(snapshot)) return snapshot
+            }
             kotlinx.coroutines.delay(500)
         }
-        return refresh(entityId)?.takeIf(matches)
+        return refresh(entityId)?.also(onSnapshot)?.takeIf(matches)
     }
 
     private suspend fun request(
@@ -101,7 +109,24 @@ class HomeAssistantRepository(
         val domain = id.substringBefore('.')
         val state = item.optString("state")
         val available = state != "unavailable" && (state != "unknown" || domain in statelessDomains)
-        return EntitySnapshot(id, domain, state, attributes.optInt("supported_features"), available, item.optString("last_updated"), attributes.optString("friendly_name", id), attributes.optString("icon").takeIf { it.isNotBlank() })
+        return EntitySnapshot(
+            entityId = id,
+            domain = domain,
+            state = state,
+            supportedFeatures = attributes.optInt("supported_features"),
+            available = available,
+            lastUpdated = item.optString("last_updated"),
+            friendlyName = attributes.optString("friendly_name", id),
+            icon = attributes.optString("icon").takeIf { it.isNotBlank() },
+            currentPosition = parseCoverPosition(attributes.opt("current_position")),
+        )
+    }
+
+    private fun parseCoverPosition(value: Any?): Int? {
+        val number = value as? Number ?: return null
+        val decimal = number.toDouble()
+        if (!decimal.isFinite() || decimal % 1 != 0.0) return null
+        return decimal.toInt().takeIf { it in 0..100 }
     }
 
     companion object {

@@ -146,6 +146,8 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
     private val message = MutableStateFlow<String?>(null)
     private val pending = MutableStateFlow<ResolvedAction?>(null)
     private val confirmation = MutableStateFlow<ResolvedAction?>(null)
+    private var pendingAuthorization = ActionAuthorization()
+    private var confirmationAuthorization = ActionAuthorization()
     private val outcome = MutableStateFlow<ActionOutcome?>(null)
     private val outcomeActionId = MutableStateFlow<String?>(null)
     private val authorizedUntil = MutableStateFlow(0L)
@@ -460,24 +462,26 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
         kind: ActionKind,
         protected: Boolean,
         confirm: Boolean,
+        targetPosition: Int? = null,
     ) =
         viewModelScope.launch {
             var completedOnboarding = false
             settingsStore.update { old ->
-                if (hasActionIdentity(old.actions, entity.entityId, kind)) {
+                if (hasActionIdentity(old.actions, entity.entityId, kind, targetPosition)) {
                     old
                 } else {
                     val action =
                         QuickAccessAction(
-                            UUID.randomUUID().toString(),
-                            entity.entityId,
-                            entity.domain,
-                            kind,
-                            protected,
-                            confirm,
-                            entity.icon,
-                            (old.actions.maxOfOrNull { a -> a.order } ?: -1) + 1,
-                            entity.friendlyName,
+                            id = UUID.randomUUID().toString(),
+                            entityId = entity.entityId,
+                            domain = entity.domain,
+                            kind = kind,
+                            protected = protected,
+                            requiresConfirmation = confirm,
+                            icon = entity.icon,
+                            order = (old.actions.maxOfOrNull { a -> a.order } ?: -1) + 1,
+                            displayName = entity.friendlyName,
+                            targetPosition = targetPosition,
                         )
                     completedOnboarding = old.onboardingStep == OnboardingStep.FIRST_ACTION
                     old.copy(
@@ -527,7 +531,7 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
             outcome.value = null
             message.value = null
             var snapshot = snapshots.value[action.entityId]
-            val mustRefresh = action.kind in setOf(ActionKind.CONTROL_LOCK, ActionKind.CONTROL_COVER)
+            val mustRefresh = action.kind in setOf(ActionKind.CONTROL_LOCK, ActionKind.CONTROL_COVER, ActionKind.SET_COVER_POSITION)
             val refreshIfStale = action.kind == ActionKind.TOGGLE && (snapshot == null || System.currentTimeMillis() - snapshot.fetchedAt > 60_000)
             if (mustRefresh || refreshIfStale) {
                 val refreshed = runCatching { repository.refresh(action.entityId) }.getOrNull()
@@ -556,27 +560,32 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
                 return@launch
             }
             if (resolved.requiresConfirmation) {
+                confirmationAuthorization = ActionAuthorization()
                 confirmation.value = resolved
             } else {
                 authorizeOrBegin(resolved)
             }
         }
 
-    private fun authorizeOrBegin(resolved: ResolvedAction) {
+    private fun authorizeOrBegin(
+        resolved: ResolvedAction,
+        authorization: ActionAuthorization = ActionAuthorization(),
+    ) {
         val action = resolved.action
         val needsAuth = state.value.settings.pinMode == PinMode.WHOLE_APP && System.currentTimeMillis() >= authorizedUntil.value || state.value.settings.pinMode == PinMode.SELECTED_ACTIONS && action.protected
-        if (needsAuth) {
+        if (needsAuth && !authorization.pinAuthorized) {
+            pendingAuthorization = authorization
             pending.value = resolved
             screen.value = Screen.PIN
         } else {
-            begin(resolved)
+            begin(resolved, authorization)
         }
     }
 
     fun confirmResolvedAction() {
         val resolved = confirmation.value ?: return
         confirmation.value = null
-        authorizeOrBegin(resolved)
+        authorizeOrBegin(resolved, confirmationAuthorization.copy(confirmed = true))
     }
 
     fun dismissConfirmation() {
@@ -610,31 +619,63 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
                         refreshEntities(silent = true)
                         checkHomeAssistantConnection()
                     }
-                    resolved?.let(::begin)
+                    resolved?.let { begin(it, pendingAuthorization.copy(pinAuthorized = true)) }
                 }
                 is com.karoohass.security.PinResult.Locked -> message.value = "PIN locked for ${result.remainingMs / 1000}s"
                 else -> message.value = "Incorrect PIN"
             }
         }
 
-    private fun begin(resolved: ResolvedAction) {
+    private fun begin(
+        original: ResolvedAction,
+        authorization: ActionAuthorization,
+    ) {
         if (!work.compareAndSet(expect = false, update = true)) return
+        val intentGeneration = actionIntentGeneration
         viewModelScope.launch {
-            val action = resolved.action
+            val action = original.action
             outcomeActionId.value = action.id
             outcome.value = null
             message.value = null
             try {
+                val decision =
+                    actionForDispatch(original, authorization.confirmed) { entityId ->
+                        repository.refresh(entityId)?.also { snapshot ->
+                            snapshots.value = snapshots.value + (entityId to snapshot)
+                        }
+                    }
+                if (intentGeneration != actionIntentGeneration) return@launch
+                val resolved = decision.resolved
+                if (resolved == null) {
+                    message.value = "Action unavailable: state could not be refreshed or position is unavailable"
+                    return@launch
+                }
+                if (decision.needsConfirmation) {
+                    confirmationAuthorization = authorization
+                    confirmation.value = resolved
+                    return@launch
+                }
                 outcome.value = ActionOutcome.SENDING
                 val requested = repository.execute(resolved)
                 outcome.value = requested
+                val updateSnapshot: (EntitySnapshot) -> Unit = { snapshot ->
+                    snapshots.value = snapshots.value + (action.entityId to snapshot)
+                }
                 val updated =
                     when {
-                        requested == ActionOutcome.SENDING && resolved.expectedState != null -> repository.awaitState(action.entityId) { it.state == resolved.expectedState }
-                        requested == ActionOutcome.REQUESTED && resolved.completesOnStateChange -> repository.awaitState(action.entityId) { resolved.startingState == null || it.state != resolved.startingState }
+                        requested == ActionOutcome.SENDING && resolved.expectedState != null ->
+                            repository.awaitState(action.entityId, { it.state == resolved.expectedState }, updateSnapshot)
+                        requested == ActionOutcome.REQUESTED && resolved.completesOnStateChange ->
+                            repository.awaitState(action.entityId, { resolved.startingState == null || it.state != resolved.startingState }, updateSnapshot)
                         requested == ActionOutcome.REQUESTED && resolved.refreshAfterRequest ->
-                            repository.awaitState(action.entityId) { resolved.startingState == null || it.state != resolved.startingState }
-                                ?: repository.refresh(action.entityId)
+                            repository.awaitState(
+                                action.entityId,
+                                {
+                                    resolved.targetPosition?.let { target -> it.currentPosition == target }
+                                        ?: (resolved.startingState == null || it.state != resolved.startingState)
+                                },
+                                updateSnapshot,
+                            ) ?: repository.refresh(action.entityId)?.also(updateSnapshot)
                         else -> null
                     }
                 if (updated != null) {
