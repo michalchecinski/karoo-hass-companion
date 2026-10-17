@@ -4,7 +4,7 @@ Karoo Home Assistant Companion is a focused Home Assistant remote for the Hammer
 
 [![Build](https://github.com/michalchecinski/karoo-hass-companion/actions/workflows/ci.yml/badge.svg)](https://github.com/michalchecinski/karoo-hass-companion/actions/workflows/ci.yml)
 [![Latest Release](https://img.shields.io/github/v/release/michalchecinski/karoo-hass-companion?label=Latest%20Release)](https://github.com/michalchecinski/karoo-hass-companion/releases/latest/)
-[![GitHub Downloads](https://img.shields.io/github/downloads/michalchecinski/karoo-hass-companion/karoo-hass-companion.apk)](https://github.com/michalchecinski/karoo-hass-companion/releases)
+[![APK downloads](https://img.shields.io/github/downloads/michalchecinski/karoo-hass-companion/karoo-hass-companion.apk?displayAssetName=false&label=APK%20downloads)](https://github.com/michalchecinski/karoo-hass-companion/releases)
 
 ##  Features
 
