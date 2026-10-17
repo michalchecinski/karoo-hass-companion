@@ -13,11 +13,6 @@ Keep this package list aligned if the project's SDK requirements change.
 
 ## Versioning and changelog
 
-The README badges show CI status, the latest stable release, and cumulative
-downloads of the `karoo-hass-companion.apk` asset across releases. The CI badge
-has no branch filter: CI runs automatically for pull requests, and GitHub falls
-back to the latest run across branches when there are no default-branch runs.
-
 Every pull request must have exactly one version label:
 
 - `version:major` for incompatible product or distribution changes;
