@@ -147,6 +147,8 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
     private val message = MutableStateFlow<String?>(null)
     private val pending = MutableStateFlow<ResolvedAction?>(null)
     private val confirmation = MutableStateFlow<ResolvedAction?>(null)
+    private var pendingAuthorization = ActionAuthorization()
+    private var confirmationAuthorization = ActionAuthorization()
     private val outcome = MutableStateFlow<ActionOutcome?>(null)
     private val outcomeActionId = MutableStateFlow<String?>(null)
     private val authorizedUntil = MutableStateFlow(0L)
@@ -563,27 +565,32 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
                 return@launch
             }
             if (resolved.requiresConfirmation) {
+                confirmationAuthorization = ActionAuthorization()
                 confirmation.value = resolved
             } else {
                 authorizeOrBegin(resolved)
             }
         }
 
-    private fun authorizeOrBegin(resolved: ResolvedAction) {
+    private fun authorizeOrBegin(
+        resolved: ResolvedAction,
+        authorization: ActionAuthorization = ActionAuthorization(),
+    ) {
         val action = resolved.action
         val needsAuth = state.value.settings.pinMode == PinMode.WHOLE_APP && System.currentTimeMillis() >= authorizedUntil.value || state.value.settings.pinMode == PinMode.SELECTED_ACTIONS && action.protected
-        if (needsAuth) {
+        if (needsAuth && !authorization.pinAuthorized) {
+            pendingAuthorization = authorization
             pending.value = resolved
             screen.value = Screen.PIN
         } else {
-            begin(resolved)
+            begin(resolved, authorization)
         }
     }
 
     fun confirmResolvedAction() {
         val resolved = confirmation.value ?: return
         confirmation.value = null
-        authorizeOrBegin(resolved)
+        authorizeOrBegin(resolved, confirmationAuthorization.copy(confirmed = true))
     }
 
     fun dismissConfirmation() {
@@ -617,21 +624,42 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
                         refreshEntities(silent = true)
                         checkHomeAssistantConnection()
                     }
-                    resolved?.let(::begin)
+                    resolved?.let { begin(it, pendingAuthorization.copy(pinAuthorized = true)) }
                 }
                 is com.karoohass.security.PinResult.Locked -> message.value = "PIN locked for ${result.remainingMs / 1000}s"
                 else -> message.value = "Incorrect PIN"
             }
         }
 
-    private fun begin(resolved: ResolvedAction) {
+    private fun begin(
+        original: ResolvedAction,
+        authorization: ActionAuthorization,
+    ) {
         if (!work.compareAndSet(expect = false, update = true)) return
+        val intentGeneration = actionIntentGeneration
         viewModelScope.launch {
-            val action = resolved.action
+            val action = original.action
             outcomeActionId.value = action.id
             outcome.value = null
             message.value = null
             try {
+                val decision =
+                    actionForDispatch(original, authorization.confirmed) { entityId ->
+                        repository.refresh(entityId)?.also { snapshot ->
+                            snapshots.value = snapshots.value + (entityId to snapshot)
+                        }
+                    }
+                if (intentGeneration != actionIntentGeneration) return@launch
+                val resolved = decision.resolved
+                if (resolved == null) {
+                    message.value = "Action unavailable: state could not be refreshed or position is unavailable"
+                    return@launch
+                }
+                if (decision.needsConfirmation) {
+                    confirmationAuthorization = authorization
+                    confirmation.value = resolved
+                    return@launch
+                }
                 outcome.value = ActionOutcome.SENDING
                 val requested = repository.execute(resolved)
                 outcome.value = requested
