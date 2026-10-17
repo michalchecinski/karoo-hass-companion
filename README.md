@@ -2,7 +2,9 @@
 
 Karoo Home Assistant Companion is a focused Home Assistant remote for the Hammerhead Karoo bike computer. It provides quick access to a small collection of actions selected by the rider instead of reproducing a complete Home Assistant dashboard.
 
-[![Build](https://github.com/michalchecinski/karoo-hass-companion/actions/workflows/ci.yml/badge.svg?branch=main)](https://github.com/michalchecinski/karoo-hass-companion/actions/workflows/ci.yml)
+[![Build](https://github.com/michalchecinski/karoo-hass-companion/actions/workflows/ci.yml/badge.svg)](https://github.com/michalchecinski/karoo-hass-companion/actions/workflows/ci.yml)
+[![Latest Release](https://img.shields.io/github/v/release/michalchecinski/karoo-hass-companion?label=Latest%20Release)](https://github.com/michalchecinski/karoo-hass-companion/releases/latest/)
+[![GitHub Downloads](https://img.shields.io/github/downloads/michalchecinski/karoo-hass-companion/karoo-hass-companion.apk)](https://github.com/michalchecinski/karoo-hass-companion/releases)
 
 ##  Features
 
