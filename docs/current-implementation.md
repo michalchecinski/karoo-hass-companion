@@ -6,15 +6,22 @@ useful record of the intended scope but does not capture all later UX changes.
 
 ## Home Assistant connection
 
-- The app accepts a system-trusted, externally reachable HTTPS Home Assistant
-  origin and normalizes it before authentication.
+- The app accepts a system-trusted HTTPS Home Assistant origin reachable from
+  the Karoo and normalizes it before authentication.
 - Authentication uses Home Assistant OAuth in an embedded WebView. It uses the
   GitHub Pages client ID `https://michalchecinski.github.io/karoo-hass-companion/`
-  and HTTPS callback
-  `https://michalchecinski.github.io/karoo-hass-companion/auth-callback`.
+  only to identify the app to Home Assistant; Home Assistant returns the
+  authorization result directly to the app's `karoohass://auth-callback` deep
+  link.
 - The callback is intercepted by the app and the authorization code is
   exchanged over direct Wi-Fi. Tokens are encrypted with Android Keystore
-  AES-GCM storage.
+  AES-GCM storage. An incomplete or invalid callback returns to Setup with a
+  retry message rather than leaving the rider in the sign-in browser.
+- Home Assistant API traffic is never routed through a project-operated server.
+  The GitHub Pages site carries the OAuth client metadata required by Home
+  Assistant's native-app flow. Both the direct deep link and the legacy HTTPS
+  callback are advertised so previously released app versions can still sign
+  in.
 - Fresh installations continue from OAuth through guided connection-policy and
   PIN-mode choices. Neither choice is preselected, and both must be saved
   before the entity chooser becomes available. Setup finishes after the first
@@ -111,8 +118,16 @@ useful record of the intended scope but does not capture all later UX changes.
 - PIN setup, disabling, and unlock verification run outside the UI thread.
   Each operation disables its controls and shows an in-progress spinner.
 - The keyboard Done/confirm action submits a valid unlock PIN.
+- Opening the unlock screen automatically focuses its masked PIN field and
+  requests the numeric password keyboard after the window and input session
+  are ready. This also applies when returning to a locked app or retrying an
+  incorrect PIN. See [PIN keyboard](features/pin-keyboard.md).
+- The PIN layout keeps its field and Unlock button above the keyboard and can
+  scroll when additional action text needs more room.
 - An incorrect unlock attempt immediately clears the masked input. A later
   successful unlock clears the prior error message.
+- Incorrect-PIN and lockout feedback sits below Unlock inside the scrollable
+  PIN layout, so it does not overlap the field or button with the keyboard open.
 - Disabling protection requires verification of the current PIN, clears the
   verifier only after success, and confirms the result inline in Settings.
 - Whole-app PIN protection prevents entity-state traffic and Quick Access
@@ -121,8 +136,9 @@ useful record of the intended scope but does not capture all later UX changes.
 - A whole-app session remains unlocked while moving between in-app screens and
   locks again when the app leaves the foreground or starts in a protected
   configuration.
-- **Forgot PIN / erase this account** is a full-width destructive button. It
-  always presents a cancelable confirmation dialog before erasing data.
+- After an account is configured, **Forgot PIN / erase this account** is a
+  full-width destructive button. It always presents a cancelable confirmation
+  dialog before erasing data.
 
 ## Navigation and visual conventions
 
