@@ -15,10 +15,10 @@ class ActionSoundFeedbackTest {
         feedback.emit(ActionCue.COMPLETED)
         enabled = true
         foreground = false
-        feedback.emit(ActionCue.UNCERTAIN)
+        feedback.emit(ActionCue.COMPLETED)
         foreground = true
         assertEquals(listOf(ActionCue.ACCEPTED), played)
-        feedback.emit(ActionCue.FAILED)
-        assertEquals(listOf(ActionCue.ACCEPTED, ActionCue.FAILED), played)
+        feedback.emit(ActionCue.ACCEPTED)
+        assertEquals(listOf(ActionCue.ACCEPTED, ActionCue.ACCEPTED), played)
     }
 }

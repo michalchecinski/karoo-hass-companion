@@ -88,8 +88,8 @@ useful record of the intended scope but does not capture all later UX changes.
 
 - The Settings gear in the upper-right opens general settings.
 - **Sound feedback** in Settings optionally enables distinct Karoo beeps for
-  accepted requests, verified completion, definite failure, and uncertain
-  outcomes. It defaults to off and preserves visual feedback. Stateless actions
+  accepted requests and verified completion. Failure and uncertain outcomes
+  remain visual only. It defaults to off and preserves visual feedback. Stateless actions
   and cover Stop never produce a completion cue. See
   [Optional sound feedback](features/sound-feedback.md) for patterns and hardware
   verification limits.

@@ -1,6 +1,6 @@
 package com.karoohass.core
 
-enum class ActionCue { ACCEPTED, COMPLETED, FAILED, UNCERTAIN }
+enum class ActionCue { ACCEPTED, COMPLETED }
 
 /** Sound is best-effort feedback, never part of the action's result. */
 class ActionSoundFeedback(

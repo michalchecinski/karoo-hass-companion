@@ -16,18 +16,19 @@ PIN protection, polling, or automatic retry behavior.
 |---|---|---|
 | Accepted request | One short 4 kHz beep | Home Assistant returned a valid service-call acceptance response. |
 | Verified completion | Two short 5 kHz beeps | The app observed the expected state or a changed toggle state. |
-| Definite failure | Two longer 4 kHz beeps | Home Assistant rejected the request. |
-| Uncertain outcome | Three short 4 kHz beeps | The response was lost or invalid, or the app could not verify completion. |
+| Definite failure | Silent; visual feedback only | Home Assistant rejected the request. |
+| Uncertain outcome | Silent; visual feedback only | The response was lost or invalid, or the app could not verify completion. |
 
-Short tones last 200 ms, longer tones 350 ms, and pauses 100 ms.
+Tones last 200 ms and pauses 100 ms.
 An initial **Sending** state is silent. A valid response can produce the accepted
-cue, followed by a completion or uncertainty cue after state verification.
-Acceptance never proves that a physical device moved.
+cue, followed by a completion cue only if state verification succeeds.
+If verification remains uncertain, the existing visual message explains the
+result without another sound. Acceptance never proves that a physical device moved.
 
 Scripts, buttons, scenes, and cover Stop have request-only semantics: they can
 produce acceptance feedback but never completion feedback. Stop's best-effort
 refresh does not establish physical completion. A malformed or missing response
-produces uncertainty without acceptance or completion. A rejected toggle stays
+produces visual uncertainty without any sound. A rejected toggle stays
 **Failed** rather than being overwritten by a polling-timeout result.
 
 Blocked actions, canceled confirmation, PIN entry, discovery, and ordinary state
@@ -55,7 +56,7 @@ pattern-overlap guarantees. Emulator checks validate the preference UI and
 graceful operation without Karoo services. They cannot establish audibility.
 Before hardware acceptance, verify on a supported physical Karoo 3:
 
-- All four patterns can be distinguished outdoors without being intrusive.
+- Both patterns can be distinguished outdoors without being intrusive.
 - System sound settings and restrictions are respected.
 - Acceptance followed by an immediately verified completion remains intelligible.
 - Disabling feedback, backgrounding, and service reconnection do not replay cues.

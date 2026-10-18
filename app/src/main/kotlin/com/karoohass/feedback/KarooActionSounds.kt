@@ -35,8 +35,6 @@ class KarooActionSounds(context: Context) {
             when (cue) {
                 ActionCue.ACCEPTED -> listOf(tone(4000, 200))
                 ActionCue.COMPLETED -> listOf(tone(5000, 200), tone(null, 100), tone(5000, 200))
-                ActionCue.FAILED -> listOf(tone(4000, 350), tone(null, 100), tone(4000, 350))
-                ActionCue.UNCERTAIN -> listOf(tone(4000, 200), tone(null, 100), tone(4000, 200), tone(null, 100), tone(4000, 200))
             },
         )
     }

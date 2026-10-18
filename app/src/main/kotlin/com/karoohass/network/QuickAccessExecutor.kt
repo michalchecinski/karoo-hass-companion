@@ -19,16 +19,13 @@ class QuickAccessExecutor(private val repository: HomeAssistantRepository) {
         val requested = repository.execute(resolved)
         currentCoroutineContext().ensureActive()
         onOutcome(requested)
-        onCue(
-            when (requested) {
-                // SENDING returned by execute means a validated accepted response,
-                // unlike the initial SENDING published before the HTTP request.
-                ActionOutcome.SENDING, ActionOutcome.REQUESTED -> ActionCue.ACCEPTED
-                ActionOutcome.FAILED -> ActionCue.FAILED
-                ActionOutcome.UNKNOWN -> ActionCue.UNCERTAIN
-                ActionOutcome.COMPLETED -> ActionCue.COMPLETED
-            },
-        )
+        when (requested) {
+            // SENDING returned by execute means a validated accepted response,
+            // unlike the initial SENDING published before the HTTP request.
+            ActionOutcome.SENDING, ActionOutcome.REQUESTED -> onCue(ActionCue.ACCEPTED)
+            ActionOutcome.COMPLETED -> onCue(ActionCue.COMPLETED)
+            else -> Unit
+        }
         val updated =
             when {
                 requested == ActionOutcome.SENDING && resolved.expectedState != null -> repository.awaitState(resolved.action.entityId) { it.state == resolved.expectedState }
@@ -49,11 +46,7 @@ class QuickAccessExecutor(private val repository: HomeAssistantRepository) {
             }
         if (result != requested) {
             onOutcome(result)
-            when (result) {
-                ActionOutcome.COMPLETED -> onCue(ActionCue.COMPLETED)
-                ActionOutcome.UNKNOWN -> onCue(ActionCue.UNCERTAIN)
-                else -> Unit
-            }
+            if (result == ActionOutcome.COMPLETED) onCue(ActionCue.COMPLETED)
         }
         return result
     }

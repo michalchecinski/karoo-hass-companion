@@ -10,7 +10,6 @@ import androidx.annotation.StringRes
 import androidx.lifecycle.AndroidViewModel
 import androidx.lifecycle.viewModelScope
 import com.karoohass.auth.OAuthManager
-import com.karoohass.core.ActionCue
 import com.karoohass.core.ActionKind
 import com.karoohass.core.ActionOutcome
 import com.karoohass.core.ActionSoundFeedback
@@ -663,7 +662,6 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
             } catch (error: Exception) {
                 outcome.value = ActionOutcome.UNKNOWN
                 message.value = "Action outcome is uncertain."
-                soundFeedback.emit(ActionCue.UNCERTAIN)
                 Log.e("KarooHassAction", "Action failed unexpectedly", error)
             } finally {
                 work.value = false

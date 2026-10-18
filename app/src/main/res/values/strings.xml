@@ -45,5 +45,5 @@
     <string name="quick_access_failed">Failed</string>
     <string name="quick_access_outcome_uncertain">Outcome uncertain</string>
     <string name="sound_feedback_title">Sound feedback</string>
-    <string name="sound_feedback_description">Accepted requests, verified completion, failure, or uncertainty. Visual feedback stays on. Uses Karoo sound controls.</string>
+    <string name="sound_feedback_description">Sounds for accepted requests and verified completion. Failures and uncertain outcomes stay visual. Uses Karoo sound controls.</string>
 </resources>

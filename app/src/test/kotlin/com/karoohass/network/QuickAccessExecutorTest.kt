@@ -57,7 +57,7 @@ class QuickAccessExecutorTest {
         runBlocking {
             val run = RecordingExecution(state = "off")
             assertEquals(ActionOutcome.UNKNOWN, run.execute(action("light", ActionKind.TOGGLE, "off")))
-            assertEquals(listOf(ActionCue.ACCEPTED, ActionCue.UNCERTAIN), run.cues)
+            assertEquals(listOf(ActionCue.ACCEPTED), run.cues)
         }
 
     @Test
@@ -70,16 +70,16 @@ class QuickAccessExecutorTest {
         }
 
     @Test
-    fun `rejected toggle stays failed and never polls or plays uncertainty`() =
+    fun `rejected toggle stays failed and never polls or plays a sound`() =
         runBlocking {
             val run = RecordingExecution(response = HttpResponse(403, emptyMap(), null))
             assertEquals(ActionOutcome.FAILED, run.execute(action("switch", ActionKind.TOGGLE, "off")))
-            assertEquals(listOf(ActionCue.FAILED), run.cues)
+            assertTrue(run.cues.isEmpty())
             assertEquals(listOf("POST"), run.methods)
         }
 
     @Test
-    fun `missing malformed and lost responses only play uncertainty`() =
+    fun `missing malformed and lost responses stay uncertain without sound`() =
         runBlocking {
             listOf(
                 HttpResponse(200, emptyMap(), null),
@@ -88,7 +88,7 @@ class QuickAccessExecutorTest {
             ).forEach { response ->
                 val run = RecordingExecution(response = response)
                 assertEquals(ActionOutcome.UNKNOWN, run.execute(action("button", ActionKind.PRESS_BUTTON)))
-                assertEquals(listOf(ActionCue.UNCERTAIN), run.cues)
+                assertTrue(run.cues.isEmpty())
             }
         }
 
