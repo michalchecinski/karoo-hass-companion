@@ -69,6 +69,7 @@ data class AppSettings(
     val pinMode: PinMode = PinMode.DISABLED,
     val actions: List<QuickAccessAction> = emptyList(),
     val onboardingStep: OnboardingStep = OnboardingStep.CONNECT,
+    val soundFeedbackEnabled: Boolean = false,
 )
 
 fun OnboardingStep.allowsActionManagement() = this == OnboardingStep.FIRST_ACTION || this == OnboardingStep.COMPLETE

@@ -13,15 +13,17 @@ private val Context.appDataStore by preferencesDataStore("karoo_hass_settings")
 
 class SettingsStore(private val context: Context) {
     private val settingsKey = stringPreferencesKey("settings")
-    val settings: Flow<AppSettings> = context.appDataStore.data.map { it[settingsKey]?.let(::decode) ?: AppSettings() }
+    val settings: Flow<AppSettings> = context.appDataStore.data.map { it[settingsKey]?.let(AppSettingsJson::decode) ?: AppSettings() }
 
     suspend fun update(transform: (AppSettings) -> AppSettings) {
         context.appDataStore.edit { prefs ->
-            prefs[settingsKey] = encode(transform(decode(prefs[settingsKey]))).toString()
+            prefs[settingsKey] = AppSettingsJson.encode(transform(AppSettingsJson.decode(prefs[settingsKey]))).toString()
         }
     }
+}
 
-    private fun decode(value: String?): AppSettings =
+internal object AppSettingsJson {
+    fun decode(value: String?): AppSettings =
         runCatching {
             if (value == null) return AppSettings()
             val root = JSONObject(value)
@@ -30,6 +32,7 @@ class SettingsStore(private val context: Context) {
                 origin = root.optString("origin").takeIf { it.isNotBlank() },
                 connectionPolicy = ConnectionPolicy.valueOf(root.optString("policy", ConnectionPolicy.WIFI_ONLY.name)),
                 pinMode = PinMode.valueOf(root.optString("pinMode", PinMode.DISABLED.name)),
+                soundFeedbackEnabled = root.optBoolean("soundFeedbackEnabled", false),
                 actions =
                     List(actions.length()) { i ->
                         actions.getJSONObject(i).let { item ->
@@ -47,11 +50,12 @@ class SettingsStore(private val context: Context) {
             )
         }.getOrDefault(AppSettings())
 
-    private fun encode(settings: AppSettings) =
+    fun encode(settings: AppSettings) =
         JSONObject().apply {
             put("origin", settings.origin)
             put("policy", settings.connectionPolicy.name)
             put("pinMode", settings.pinMode.name)
+            put("soundFeedbackEnabled", settings.soundFeedbackEnabled)
             put("onboardingStep", settings.onboardingStep.name)
             put(
                 "actions",

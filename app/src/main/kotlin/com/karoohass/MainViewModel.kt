@@ -10,8 +10,10 @@ import androidx.annotation.StringRes
 import androidx.lifecycle.AndroidViewModel
 import androidx.lifecycle.viewModelScope
 import com.karoohass.auth.OAuthManager
+import com.karoohass.core.ActionCue
 import com.karoohass.core.ActionKind
 import com.karoohass.core.ActionOutcome
+import com.karoohass.core.ActionSoundFeedback
 import com.karoohass.core.AppSettings
 import com.karoohass.core.ConnectionPolicy
 import com.karoohass.core.EntitySnapshot
@@ -24,10 +26,12 @@ import com.karoohass.core.actionHint
 import com.karoohass.core.allowsActionManagement
 import com.karoohass.core.hasActionIdentity
 import com.karoohass.core.resolve
+import com.karoohass.feedback.KarooActionSounds
 import com.karoohass.network.DirectWifiTransport
 import com.karoohass.network.HomeAssistantRepository
 import com.karoohass.network.KarooTransport
 import com.karoohass.network.PolicyTransport
+import com.karoohass.network.QuickAccessExecutor
 import com.karoohass.security.PinStore
 import com.karoohass.security.TokenStore
 import kotlinx.coroutines.CancellationException
@@ -208,7 +212,21 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
             )
         }.stateIn(viewModelScope, SharingStarted.Eagerly, UiState())
 
+    private val actionSounds = KarooActionSounds(application)
+    private val soundFeedback =
+        ActionSoundFeedback(
+            enabled = { state.value.settings.soundFeedbackEnabled },
+            foreground = { appInForeground },
+            play = actionSounds::play,
+        )
+    private val actionExecutor = QuickAccessExecutor(repository)
+
     init {
+        viewModelScope.launch {
+            rawSettings.collect { settings ->
+                if (settings.soundFeedbackEnabled && appInForeground) actionSounds.connect() else actionSounds.disconnect()
+            }
+        }
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.N) {
             connectivityManager.registerDefaultNetworkCallback(connectivityCallback)
         }
@@ -236,6 +254,9 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
             }
         }
     }
+
+    fun saveSoundFeedback(enabled: Boolean) =
+        viewModelScope.launch { settingsStore.update { it.copy(soundFeedbackEnabled = enabled) } }
 
     fun openSetup() {
         cancelConnectionCheck()
@@ -625,24 +646,12 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
             outcome.value = null
             message.value = null
             try {
-                outcome.value = ActionOutcome.SENDING
-                val requested = repository.execute(resolved)
-                outcome.value = requested
-                val updated =
-                    when {
-                        requested == ActionOutcome.SENDING && resolved.expectedState != null -> repository.awaitState(action.entityId) { it.state == resolved.expectedState }
-                        requested == ActionOutcome.REQUESTED && resolved.completesOnStateChange -> repository.awaitState(action.entityId) { resolved.startingState == null || it.state != resolved.startingState }
-                        requested == ActionOutcome.REQUESTED && resolved.refreshAfterRequest ->
-                            repository.awaitState(action.entityId) { resolved.startingState == null || it.state != resolved.startingState }
-                                ?: repository.refresh(action.entityId)
-                        else -> null
-                    }
-                if (updated != null) {
-                    snapshots.value = snapshots.value + (action.entityId to updated)
-                    if (!resolved.refreshAfterRequest) outcome.value = ActionOutcome.COMPLETED
-                } else if (requested == ActionOutcome.SENDING || resolved.completesOnStateChange) {
-                    outcome.value = ActionOutcome.UNKNOWN
-                }
+                actionExecutor.execute(
+                    resolved,
+                    onOutcome = { outcome.value = it },
+                    onSnapshot = { snapshots.value = snapshots.value + (action.entityId to it) },
+                    onCue = soundFeedback::emit,
+                )
                 message.value =
                     when (outcome.value) {
                         ActionOutcome.FAILED -> "Action was not sent. Please try again."
@@ -654,6 +663,7 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
             } catch (error: Exception) {
                 outcome.value = ActionOutcome.UNKNOWN
                 message.value = "Action outcome is uncertain."
+                soundFeedback.emit(ActionCue.UNCERTAIN)
                 Log.e("KarooHassAction", "Action failed unexpectedly", error)
             } finally {
                 work.value = false
@@ -684,6 +694,7 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
 
     fun foregroundChanged(foreground: Boolean) {
         appInForeground = foreground
+        if (foreground && state.value.settings.soundFeedbackEnabled) actionSounds.connect() else actionSounds.disconnect()
         if (foreground) {
             updateWifiAvailability(recheckConnection = true)
             checkHomeAssistantConnection()
@@ -726,6 +737,7 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
     }
 
     override fun onCleared() {
+        actionSounds.disconnect()
         cancelConnectionCheck()
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.N) runCatching { connectivityManager.unregisterNetworkCallback(connectivityCallback) }
         super.onCleared()
