@@ -47,6 +47,8 @@
     <string name="quick_access_completed">Completed</string>
     <string name="quick_access_failed">Failed</string>
     <string name="quick_access_outcome_uncertain">Outcome uncertain</string>
+    <string name="sound_feedback_title">Sound feedback</string>
+    <string name="sound_feedback_description">Sounds for accepted requests and verified completion. Failures and uncertain outcomes stay visual. Uses Karoo sound controls.</string>
     <string name="position_preset_explanation" formatted="false">Choose a whole target position from 1% to 99%.</string>
     <string name="position_preset_target_label">Target position</string>
     <string name="position_preset_invalid_target">Enter a whole number from 1 to 99.</string>

@@ -31,6 +31,7 @@ internal fun decodeSettings(value: String?): AppSettings =
             origin = root.optString("origin").takeIf { it.isNotBlank() },
             connectionPolicy = ConnectionPolicy.valueOf(root.optString("policy", ConnectionPolicy.WIFI_ONLY.name)),
             pinMode = PinMode.valueOf(root.optString("pinMode", PinMode.DISABLED.name)),
+            soundFeedbackEnabled = root.optBoolean("soundFeedbackEnabled", false),
             actions =
                 List(actions.length()) { i ->
                     actions.getJSONObject(i).let { item ->
@@ -64,6 +65,7 @@ internal fun encodeSettings(settings: AppSettings) =
         put("origin", settings.origin)
         put("policy", settings.connectionPolicy.name)
         put("pinMode", settings.pinMode.name)
+        put("soundFeedbackEnabled", settings.soundFeedbackEnabled)
         put("onboardingStep", settings.onboardingStep.name)
         put(
             "actions",
