@@ -33,6 +33,15 @@ git config --local core.hooksPath .git-hooks
 
 ## Pull requests
 
+For UI screenshots, follow the repository's
+[`karoo-screenshots` skill](.codex/skills/karoo-screenshots/SKILL.md): use a
+dedicated emulator and inspect a temporary capture before replacing an image.
+Its capture safeguards can be tested on macOS without starting an emulator:
+
+```bash
+python3 .codex/skills/karoo-screenshots/scripts/test_capture_app_only.py
+```
+
 1. Create a descriptive branch and keep the change focused.
 2. Separate UI, state, Home Assistant transport, and Karoo integration concerns.
 3. Add exactly one release label: `version:major`, `version:minor`, `version:patch`, or `version:skip`.
