@@ -25,9 +25,11 @@ cue, followed by a completion cue only if state verification succeeds.
 If verification remains uncertain, the existing visual message explains the
 result without another sound. Acceptance never proves that a physical device moved.
 
-Scripts, buttons, scenes, and cover Stop have request-only semantics: they can
+Scripts, buttons, scenes, cover Stop, and cover position presets have request-only semantics: they can
 produce acceptance feedback but never completion feedback. Stop's best-effort
-refresh does not establish physical completion. A malformed or missing response
+refresh does not establish physical completion. Presets keep updating reported
+position during polling, but reaching the target does not generate a completion
+cue. A malformed or missing response
 produces visual uncertainty without any sound. A rejected toggle stays
 **Failed** rather than being overwritten by a polling-timeout result.
 
@@ -60,20 +62,21 @@ Before hardware acceptance, verify on a supported physical Karoo 3:
 - System sound settings and restrictions are respected.
 - Acceptance followed by an immediately verified completion remains intelligible.
 - Disabling feedback, backgrounding, and service reconnection do not replay cues.
-- Scripts, scenes, buttons, Stop, rejected requests, and lost responses never
+- Scripts, scenes, buttons, Stop, position presets, rejected requests, and lost responses never
   produce a false completion cue.
 
 ## Automated verification
 
 Execution tests drive the real repository with a recording HTTP transport and
 assert cue sequences and visual outcomes for stateless acceptance, lock/cover
-verification, changed and unchanged toggles, Stop refresh failure, definite
+verification, preset progress and target timeouts, changed and unchanged toggles,
+Stop refresh failure, definite
 rejection, malformed/missing/lost responses, cancellation, disabled/background
 feedback, and broken audio. Settings tests cover old-data migration and persisted
 round trips. A Compose test checks that the full Settings row toggles the switch
 and exposes its checked state to accessibility.
 
-Implementation checks passed: `ktlintCheck check assembleDebug`, 71 unit tests
+Implementation checks passed: `ktlintCheck check assembleDebug`, 89 unit tests
 in each of the debug and release variants, and six targeted emulator UI tests.
 The switch test also passed after the final compact-layout adjustment. The
 updated Settings screenshot is in the README gallery. Physical sound checks

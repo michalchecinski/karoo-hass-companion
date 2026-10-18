@@ -11,22 +11,27 @@ Capture the affected screens after UI work. Keep production README assets in `sc
 
 1. Read `docs/` and inspect the changed composables. Identify the smallest representative set of user-visible states, including loading, empty, error, and populated states when the change affects them.
 2. Preserve unrelated worktree changes. Stage only intentional screenshot, README, and PR-description files.
-3. Build with `./gradlew :app:assembleDebug` and install the debug APK on the `Karoo` AVD. This profile is 480×800.
+3. Build with `./gradlew :app:assembleDebug`. Use a dedicated 480×800 emulator named `karoo-hass-capture-<unique-task-suffix>`, and keep its explicit ADB serial for every command. Do not navigate, install on, or capture from a shared emulator. If `Karoo` is already in use, create a fresh temporary AVD from its `config.ini` under a task-specific `ANDROID_AVD_HOME`; change `AvdId` and `avd.ini.displayname`, and create the matching `.ini` with its temporary path. Start it on an unused explicit port with `-no-snapshot`, install the APK there, and shut down only that instance when finished. Do not copy account data or use `-read-only` against an AVD already open in writable mode; the emulator rejects that combination.
 4. Use isolated emulator app data. Do not use a real Home Assistant account or token. Where a connected settings state is needed, use `https://demo.example.com` only as a nonfunctional placeholder.
-5. Navigate to each state with ADB and take a raw screenshot. Use `scripts/capture-app-only.sh` to remove the emulator's 48 px status area and 96 px navigation area. The resulting asset must be 480×656.
-6. Inspect every final image visually. Check that no Android system bar, keyboard, dialog outside the intended state, placeholder typo, or partial transition appears.
+5. Navigate to each state with ADB. Run `scripts/capture-app-only.sh` with the dedicated serial, a temporary candidate path outside the repository, and the expected AVD name. It checks emulator identity and the foreground app before and after capture, validates the raw dimensions, removes the 48 px status area and 96 px navigation area, and validates the 480×656 result before publishing its output. A failed check leaves an existing output untouched.
+6. Inspect each temporary candidate visually before copying it over a tracked screenshot. Check the intended screen and state, and that no Android system bar, keyboard, dialog outside the intended state, placeholder typo, or partial transition appears. If capture fails or another app appears, keep the tracked image and diagnose the dedicated target; do not continue with stale output. After inspection, copy only the approved candidate into `screenshots/emulator-karoo-480x800/`.
 7. Update the README gallery only when the changed screen is already represented there or the change is a user-visible feature worth showcasing. Keep the existing Karoo-project convention: sequential images between `## Screenshots` and `## Installation`, without a table, captions, or emulator qualification.
 8. For a PR that changes visible UI, add a `## Screenshots` section to its description. Link only the screenshots that demonstrate the change, using repository-relative Markdown paths when supported by the PR client; otherwise mention their paths explicitly.
 
 ## Capture command
 
-Run from the repository root. Supply the emulator serial and a descriptive output path:
+Run from the repository root after starting the dedicated emulator. Supply its
+serial, a temporary candidate path, and its exact AVD name:
 
 ```sh
-.codex/skills/karoo-screenshots/scripts/capture-app-only.sh emulator-5554 screenshots/emulator-karoo-480x800/settings-connected-app-only.png
+.codex/skills/karoo-screenshots/scripts/capture-app-only.sh emulator-5560 /tmp/karoo-hass-capture-issue-24/settings-connected-app-only.png karoo-hass-capture-issue-24
 ```
 
-The script requires macOS `sips` and validates the 480×800 capture before cropping it to a 480×656 app-only PNG. Use `adb -s <serial> shell wm size` to verify the profile first.
+The script requires macOS `sips` and expects `com.karoohass` in the foreground.
+Use `adb -s <serial> emu avd name` and `adb -s <serial> shell wm size` to verify
+the dedicated profile before navigating. Replace the example serial and suffix
+with those allocated to the current task. Run its regression checks with
+`python3 .codex/skills/karoo-screenshots/scripts/test_capture_app_only.py`.
 
 ## Asset rules
 

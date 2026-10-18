@@ -9,8 +9,8 @@ class SoundFeedbackSettingsTest {
     @Test
     fun `fresh and existing installations stay silent until opted in`() {
         assertFalse(AppSettings().soundFeedbackEnabled)
-        assertFalse(AppSettingsJson.decode(null).soundFeedbackEnabled)
-        val oldSettings = AppSettingsJson.decode("""{"origin":"https://home.example","policy":"ALLOW_COMPANION_FALLBACK","pinMode":"SELECTED_ACTIONS"}""")
+        assertFalse(decodeSettings(null).soundFeedbackEnabled)
+        val oldSettings = decodeSettings("""{"origin":"https://home.example","policy":"ALLOW_COMPANION_FALLBACK","pinMode":"SELECTED_ACTIONS"}""")
         assertFalse(oldSettings.soundFeedbackEnabled)
         assertEquals("https://home.example", oldSettings.origin)
         assertEquals(ConnectionPolicy.ALLOW_COMPANION_FALLBACK, oldSettings.connectionPolicy)
@@ -24,11 +24,15 @@ class SoundFeedbackSettingsTest {
             AppSettings(
                 origin = "https://home.example",
                 soundFeedbackEnabled = true,
-                actions = listOf(QuickAccessAction("test", "button.test", "button", ActionKind.PRESS_BUTTON)),
+                actions =
+                    listOf(
+                        QuickAccessAction("test", "button.test", "button", ActionKind.PRESS_BUTTON),
+                        QuickAccessAction("preset", "cover.test", "cover", ActionKind.SET_COVER_POSITION, targetPosition = 70),
+                    ),
             )
-        val decoded = AppSettingsJson.decode(AppSettingsJson.encode(settings).toString())
+        val decoded = decodeSettings(encodeSettings(settings).toString())
         assertTrue(decoded.soundFeedbackEnabled)
         assertEquals(settings, decoded)
-        assertFalse(AppSettingsJson.decode(AppSettingsJson.encode(decoded.copy(soundFeedbackEnabled = false)).toString()).soundFeedbackEnabled)
+        assertFalse(decodeSettings(encodeSettings(decoded.copy(soundFeedbackEnabled = false)).toString()).soundFeedbackEnabled)
     }
 }

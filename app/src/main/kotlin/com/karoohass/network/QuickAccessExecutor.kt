@@ -15,6 +15,11 @@ class QuickAccessExecutor(private val repository: HomeAssistantRepository) {
         onSnapshot: (EntitySnapshot) -> Unit,
         onCue: (ActionCue) -> Unit,
     ): ActionOutcome {
+        val executionContext = currentCoroutineContext()
+        val updateSnapshot: (EntitySnapshot) -> Unit = { snapshot ->
+            executionContext.ensureActive()
+            onSnapshot(snapshot)
+        }
         onOutcome(ActionOutcome.SENDING)
         val requested = repository.execute(resolved)
         currentCoroutineContext().ensureActive()
@@ -28,16 +33,24 @@ class QuickAccessExecutor(private val repository: HomeAssistantRepository) {
         }
         val updated =
             when {
-                requested == ActionOutcome.SENDING && resolved.expectedState != null -> repository.awaitState(resolved.action.entityId) { it.state == resolved.expectedState }
-                requested == ActionOutcome.REQUESTED && (resolved.completesOnStateChange || resolved.refreshAfterRequest) ->
-                    repository.awaitState(resolved.action.entityId) { resolved.startingState == null || it.state != resolved.startingState }
-                        ?: if (resolved.refreshAfterRequest) repository.refresh(resolved.action.entityId) else null
+                requested == ActionOutcome.SENDING && resolved.expectedState != null ->
+                    repository.awaitState(resolved.action.entityId, { it.state == resolved.expectedState }, updateSnapshot)
+                requested == ActionOutcome.REQUESTED && resolved.completesOnStateChange ->
+                    repository.awaitState(resolved.action.entityId, { resolved.startingState == null || it.state != resolved.startingState }, updateSnapshot)
+                requested == ActionOutcome.REQUESTED && resolved.refreshAfterRequest ->
+                    repository.awaitState(
+                        resolved.action.entityId,
+                        {
+                            resolved.targetPosition?.let { target -> it.currentPosition == target }
+                                ?: (resolved.startingState == null || it.state != resolved.startingState)
+                        },
+                        updateSnapshot,
+                    ) ?: repository.refresh(resolved.action.entityId)?.also(updateSnapshot)
                 else -> null
             }
         currentCoroutineContext().ensureActive()
         val result =
             if (updated != null) {
-                onSnapshot(updated)
                 if (resolved.refreshAfterRequest) requested else ActionOutcome.COMPLETED
             } else if (requested == ActionOutcome.SENDING || requested == ActionOutcome.REQUESTED && resolved.completesOnStateChange) {
                 ActionOutcome.UNKNOWN

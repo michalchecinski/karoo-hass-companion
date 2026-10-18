@@ -70,6 +70,31 @@ class QuickAccessExecutorTest {
         }
 
     @Test
+    fun `cover preset refreshes gradual positions until the target with acceptance sound only`() =
+        runBlocking {
+            val run = RecordingExecution(state = "opening", positions = listOf(30, 50, 70))
+            val preset = action("cover", ActionKind.SET_COVER_POSITION, "open", 4, targetPosition = 70, currentPosition = 20)
+
+            assertEquals(ActionOutcome.REQUESTED, run.execute(preset))
+            assertEquals(listOf(30, 50, 70), run.snapshots.map { it.currentPosition })
+            assertEquals(listOf(ActionCue.ACCEPTED), run.cues)
+            assertEquals(listOf(ActionOutcome.SENDING, ActionOutcome.REQUESTED), run.outcomes)
+            assertEquals(1, run.methods.count { it == "POST" })
+        }
+
+    @Test
+    fun `cover preset stays requested without completion sound when target is not observed`() =
+        runBlocking {
+            val run = RecordingExecution(state = "opening", positions = listOf(30, 50, 60))
+            val preset = action("cover", ActionKind.SET_COVER_POSITION, "open", 4, targetPosition = 70, currentPosition = 20)
+
+            assertEquals(ActionOutcome.REQUESTED, run.execute(preset))
+            assertEquals(60, run.snapshots.last().currentPosition)
+            assertEquals(listOf(ActionCue.ACCEPTED), run.cues)
+            assertEquals(1, run.methods.count { it == "POST" })
+        }
+
+    @Test
     fun `rejected toggle stays failed and never polls or plays a sound`() =
         runBlocking {
             val run = RecordingExecution(response = HttpResponse(403, emptyMap(), null))
@@ -139,14 +164,17 @@ class QuickAccessExecutorTest {
         kind: ActionKind,
         state: String = "unknown",
         features: Int = 0,
+        targetPosition: Int? = null,
+        currentPosition: Int? = null,
     ): ResolvedAction {
-        val action = QuickAccessAction("id", "$domain.test", domain, kind)
-        return action.resolve(EntitySnapshot(action.entityId, domain, state, features, true, friendlyName = "Test"))!!
+        val action = QuickAccessAction("id", "$domain.test", domain, kind, targetPosition = targetPosition)
+        return action.resolve(EntitySnapshot(action.entityId, domain, state, features, true, friendlyName = "Test", currentPosition = currentPosition))!!
     }
 
     private class RecordingExecution(
         private val response: HttpResponse = HttpResponse(200, emptyMap(), "[]".toByteArray()),
         private val state: String? = "on",
+        private val positions: List<Int> = emptyList(),
         private val cancelPost: Boolean = false,
         private val cancelDuringRefresh: Boolean = false,
         enabled: Boolean = true,
@@ -174,13 +202,14 @@ class QuickAccessExecutorTest {
                             return response
                         }
                         if (cancelDuringRefresh) currentCoroutineContext().cancel()
+                        val position = positions.getOrNull(methods.count { it == "GET" } - 1) ?: positions.lastOrNull()
                         return if (state == null) {
                             HttpResponse(503, emptyMap(), null)
                         } else {
                             HttpResponse(
                                 200,
                                 emptyMap(),
-                                """{"entity_id":"${request.url.substringAfterLast('/')}","state":"$state"}""".toByteArray(),
+                                """{"entity_id":"${request.url.substringAfterLast('/')}","state":"$state","attributes":{"current_position":$position}}""".toByteArray(),
                             )
                         }
                     }

@@ -63,6 +63,8 @@ Home Assistant references:
 - A target lower than the current position uses the preset's optional confirmation setting.
 - Position presets follow the existing whole-app and selected-action PIN modes.
 - Confirmation occurs before PIN authorization, matching existing Quick Access actions.
+- Immediately before dispatch, including after PIN authorization, the app refreshes and resolves the preset again. If the cover has moved below the target and that preset has not already been confirmed, confirmation is required before sending. The successful PIN authorization is retained for that request, so this additional confirmation does not ask for the PIN again.
+- A failed refresh or unavailable position at dispatch blocks even an already confirmed preset. Prior confirmation applies only to the same configured preset and is discarded when the request is canceled or the app leaves the foreground.
 - Canceling confirmation or failing PIN authorization sends no request.
 - Requests use the existing OAuth credentials, encrypted token storage, connection policy, and account-reset behavior.
 
