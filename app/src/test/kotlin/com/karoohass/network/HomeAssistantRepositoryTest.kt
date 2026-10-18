@@ -106,6 +106,29 @@ class HomeAssistantRepositoryTest {
             assertFalse(entities.getValue("lock.front_door").available)
         }
 
+    @Test
+    fun `cover discovery accepts only whole numeric positions from zero through one hundred`() =
+        runBlocking {
+            val states =
+                """
+                [
+                  {"entity_id":"cover.valid","state":"open","attributes":{"current_position":50}},
+                  {"entity_id":"cover.decimal","state":"open","attributes":{"current_position":50.5}},
+                  {"entity_id":"cover.string","state":"open","attributes":{"current_position":"50"}},
+                  {"entity_id":"cover.out_of_range","state":"open","attributes":{"current_position":101}},
+                  {"entity_id":"cover.missing","state":"open","attributes":{}}
+                ]
+                """.trimIndent().toByteArray()
+
+            val entities = repository(RecordingTransport(HttpResponse(200, emptyMap(), states))).discover().associateBy { it.entityId }
+
+            assertEquals(50, entities.getValue("cover.valid").currentPosition)
+            assertEquals(null, entities.getValue("cover.decimal").currentPosition)
+            assertEquals(null, entities.getValue("cover.string").currentPosition)
+            assertEquals(null, entities.getValue("cover.out_of_range").currentPosition)
+            assertEquals(null, entities.getValue("cover.missing").currentPosition)
+        }
+
     private fun repository(transport: HttpTransport) =
         HomeAssistantRepository({ "https://home.example" }, transport, { Tokens("token", null, 0) }) { false }
 
