@@ -49,6 +49,7 @@ import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.RadioButton
 import androidx.compose.material3.Scaffold
+import androidx.compose.material3.Switch
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
@@ -68,6 +69,7 @@ import androidx.compose.ui.platform.LocalWindowInfo
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.res.stringResource
+import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.text.input.ImeAction
 import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.text.input.PasswordVisualTransformation
@@ -393,6 +395,7 @@ private fun HomeAssistantIcon(
                     )
                 }
             }
+            item { SoundFeedbackSetting(state.settings.soundFeedbackEnabled, model::saveSoundFeedback) }
             item { Text("Connection policy") }
             item {
                 ConnectionPolicy.entries.forEach { policy ->
@@ -993,5 +996,21 @@ private fun ActionKind.labelResource() =
         }
         if (state.unlocking) CircularProgressIndicator(Modifier.padding(top = 16.dp))
         state.pending?.let { Text(it.confirmationLabel(state.snapshots[it.action.entityId])) }
+    }
+}
+
+@Composable
+internal fun SoundFeedbackSetting(
+    enabled: Boolean,
+    onEnabledChanged: (Boolean) -> Unit,
+) {
+    Column(
+        Modifier.fillMaxWidth().toggleable(value = enabled, role = Role.Switch, onValueChange = onEnabledChanged),
+    ) {
+        Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+            Text(stringResource(R.string.sound_feedback_title), modifier = Modifier.weight(1f))
+            Switch(checked = enabled, onCheckedChange = null)
+        }
+        Text(stringResource(R.string.sound_feedback_description), style = MaterialTheme.typography.bodySmall)
     }
 }

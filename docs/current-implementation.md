@@ -104,6 +104,12 @@ useful record of the intended scope but does not capture all later UX changes.
 ## Managing actions
 
 - The Settings gear in the upper-right opens general settings.
+- **Sound feedback** in Settings optionally enables distinct Karoo beeps for
+  accepted requests and verified completion. Failure and uncertain outcomes
+  remain visual only. It defaults to off and preserves visual feedback. Stateless
+  actions, cover Stop, and cover position presets never produce a completion cue. See
+  [Optional sound feedback](features/sound-feedback.md) for patterns and hardware
+  verification limits.
 - **Manage Quick Access** opens the entity chooser. The chooser does not
   replace the general settings screen.
 - The chooser fetches supported Home Assistant entities over direct Wi-Fi,
