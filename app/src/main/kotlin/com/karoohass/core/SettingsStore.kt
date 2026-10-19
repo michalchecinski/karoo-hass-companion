@@ -31,6 +31,7 @@ internal fun decodeSettings(value: String?): AppSettings =
             origin = root.optString("origin").takeIf { it.isNotBlank() },
             connectionPolicy = ConnectionPolicy.valueOf(root.optString("policy", ConnectionPolicy.WIFI_ONLY.name)),
             pinMode = PinMode.valueOf(root.optString("pinMode", PinMode.DISABLED.name)),
+            rideEndNotificationEnabled = root.optBoolean("rideEndNotificationEnabled", true),
             soundFeedbackEnabled = root.optBoolean("soundFeedbackEnabled", false),
             actions =
                 List(actions.length()) { i ->
@@ -67,6 +68,7 @@ internal fun encodeSettings(settings: AppSettings) =
         put("pinMode", settings.pinMode.name)
         put("soundFeedbackEnabled", settings.soundFeedbackEnabled)
         put("onboardingStep", settings.onboardingStep.name)
+        put("rideEndNotificationEnabled", settings.rideEndNotificationEnabled)
         put(
             "actions",
             JSONArray().apply {

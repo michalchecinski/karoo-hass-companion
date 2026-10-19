@@ -375,6 +375,26 @@ private fun HomeAssistantIcon(
             }
         }
         if (state.settings.onboardingStep == OnboardingStep.COMPLETE) {
+            item {
+                Row(
+                    Modifier.fillMaxWidth().toggleable(
+                        value = state.settings.rideEndNotificationEnabled,
+                        role = androidx.compose.ui.semantics.Role.Switch,
+                        onValueChange = model::saveRideEndNotification,
+                    ),
+                    verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.spacedBy(12.dp),
+                ) {
+                    Column(Modifier.weight(1f)) {
+                        Text(stringResource(R.string.ride_ended_notification_setting))
+                        Text(stringResource(R.string.ride_ended_notification_description), style = MaterialTheme.typography.bodySmall)
+                    }
+                    androidx.compose.material3.Switch(
+                        checked = state.settings.rideEndNotificationEnabled,
+                        onCheckedChange = null,
+                    )
+                }
+            }
             item { SoundFeedbackSetting(state.settings.soundFeedbackEnabled, model::saveSoundFeedback) }
             item { Text("Connection policy") }
             item {

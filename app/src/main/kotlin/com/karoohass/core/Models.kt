@@ -77,6 +77,7 @@ data class AppSettings(
     val pinMode: PinMode = PinMode.DISABLED,
     val actions: List<QuickAccessAction> = emptyList(),
     val onboardingStep: OnboardingStep = OnboardingStep.CONNECT,
+    val rideEndNotificationEnabled: Boolean = true,
     val soundFeedbackEnabled: Boolean = false,
 )
 

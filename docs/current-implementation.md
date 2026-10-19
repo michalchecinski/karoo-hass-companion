@@ -89,6 +89,18 @@ useful record of the intended scope but does not capture all later UX changes.
 - Configured actions store the Home Assistant friendly name and icon and are
   refreshed when discovery finds a newer entity definition.
 
+## Ride-end shortcut
+
+- A Karoo extension service observes ride state while the app UI is closed.
+- After a recording or paused ride ends, a Control Center notification offers
+  **Open Karoo HASS**, opening Quick Access with the normal PIN protection.
+- Manual pauses, auto-pauses, and initial idle do not trigger a notification.
+- **Settings → Ride-end notification** enables or disables future reminders.
+  It defaults to on and persists across restarts.
+- Immediate banner presentation requires physical-device validation. See
+  [Ride-end notification](features/ride-end-notification.md) for platform limits
+  and the device test procedure.
+
 ## Managing actions
 
 - The Settings gear in the upper-right opens general settings.

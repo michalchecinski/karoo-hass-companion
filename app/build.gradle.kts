@@ -91,6 +91,7 @@ android {
         jvmTarget = "1.8"
     }
     buildFeatures {
+        buildConfig = true
         compose = true
     }
     // AGP 8.2 cannot 16 KB zip-align uncompressed native dependencies. Compressing

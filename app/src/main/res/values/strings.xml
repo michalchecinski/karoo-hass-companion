@@ -1,5 +1,9 @@
 <resources>
     <string name="app_name">Karoo HASS</string>
+    <string name="ride_ended_notification_message">Ride finished. Open your Home Assistant controls.</string>
+    <string name="ride_ended_notification_action">Open Karoo HASS</string>
+    <string name="ride_ended_notification_setting">Ride-end notification</string>
+    <string name="ride_ended_notification_description">Show a shortcut in Control Center after a ride ends.</string>
     <string name="oauth_client_id">https://michalchecinski.github.io/karoo-hass-companion/</string>
     <string name="oauth_redirect_uri">karoohass://auth-callback</string>
     <string name="setup_origin_help">Enter a trusted HTTPS address reachable from your Karoo.</string>
