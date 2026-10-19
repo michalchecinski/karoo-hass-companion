@@ -259,6 +259,17 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
 
     fun continueOnboarding() = openOnboardingStep(state.value.settings.onboardingStep)
 
+    fun openQuickAccess() {
+        viewModelScope.launch {
+            val settings = rawSettings.first()
+            if (settings.onboardingStep == OnboardingStep.COMPLETE) {
+                home()
+            } else {
+                openOnboardingStep(settings.onboardingStep)
+            }
+        }
+    }
+
     fun home() {
         screen.value = Screen.HOME
         pending.value = null
@@ -323,6 +334,11 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
         message.value = getApplication<Application>().getString(R.string.oauth_callback_incomplete)
         screen.value = Screen.SETUP
     }
+
+    fun saveRideEndNotification(enabled: Boolean) =
+        viewModelScope.launch {
+            settingsStore.update { it.copy(rideEndNotificationEnabled = enabled) }
+        }
 
     fun savePolicy(policy: ConnectionPolicy) =
         viewModelScope.launch {

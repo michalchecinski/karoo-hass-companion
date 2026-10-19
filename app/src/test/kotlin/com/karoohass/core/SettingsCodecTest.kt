@@ -5,6 +5,20 @@ import org.junit.Assert.assertNull
 import org.junit.Test
 
 class SettingsCodecTest {
+    @Test fun `ride notification defaults on for new and older settings`() {
+        assertEquals(true, decodeSettings(null).rideEndNotificationEnabled)
+        assertEquals(true, decodeSettings("{}").rideEndNotificationEnabled)
+    }
+
+    @Test fun `ride notification choice survives settings updates`() {
+        for (enabled in listOf(false, true)) {
+            val settings = AppSettings(rideEndNotificationEnabled = enabled)
+            val decoded = decodeSettings(encodeSettings(settings).toString())
+            val updated = decoded.copy(connectionPolicy = ConnectionPolicy.ALLOW_COMPANION_FALLBACK)
+            assertEquals(enabled, decodeSettings(encodeSettings(updated).toString()).rideEndNotificationEnabled)
+        }
+    }
+
     @Test fun `older saved actions decode without a position target`() {
         val settings =
             decodeSettings(
