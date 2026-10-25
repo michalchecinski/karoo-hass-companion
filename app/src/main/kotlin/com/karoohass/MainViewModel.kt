@@ -7,9 +7,14 @@ import android.net.NetworkCapabilities
 import android.os.Build
 import android.util.Log
 import androidx.annotation.StringRes
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.setValue
 import androidx.lifecycle.AndroidViewModel
 import androidx.lifecycle.viewModelScope
 import com.karoohass.auth.OAuthManager
+import com.karoohass.auth.OriginError
+import com.karoohass.auth.validateHomeAssistantOrigin
 import com.karoohass.core.ActionKind
 import com.karoohass.core.ActionOutcome
 import com.karoohass.core.AppSettings
@@ -153,7 +158,9 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
     private val wholeAppLocked = MutableStateFlow(true)
     private var appInForeground = false
     private var actionIntentGeneration = 0L
-    private var authorizationUrl: String? = null
+    private var callbackJob: kotlinx.coroutines.Job? = null
+    private var authorizationGeneration = 0L
+    private var authorizationUrl by mutableStateOf<String?>(null)
     private val directTransport = DirectWifiTransport(application)
     private val wifiAvailable = MutableStateFlow(directTransport.isAvailable())
     private val connectionStatus = MutableStateFlow(ConnectionStatus.NOT_CHECKED)
@@ -266,6 +273,7 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
     }
 
     fun back() {
+        if (screen.value == Screen.AUTH) cancelPendingAuthentication()
         screen.value =
             when (screen.value) {
                 Screen.MANAGE -> Screen.SETUP
@@ -279,43 +287,82 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
     }
 
     fun setOrigin(raw: String): String? {
-        val normalized = oauth.normalizeOrigin(raw) ?: return "Enter a trusted HTTPS Home Assistant origin"
+        val normalized = validateHomeAssistantOrigin(raw).let { it.origin ?: return originErrorMessage(it.error) }
         viewModelScope.launch { settingsStore.update { it.copy(origin = normalized) } }
         return null
     }
 
     /** Starts OAuth from the validated input, not from DataStore's eventually-consistent state. */
     fun beginAuthentication(rawOrigin: String): String? {
-        val origin = oauth.normalizeOrigin(rawOrigin) ?: return "Enter a trusted HTTPS Home Assistant origin"
+        val origin = validateHomeAssistantOrigin(rawOrigin).let { it.origin ?: return originErrorMessage(it.error) }
+        cancelPendingAuthentication()
+        message.value = null
         authorizationUrl = oauth.authorizationUrl(origin)
         viewModelScope.launch { settingsStore.update { it.copy(origin = origin) } }
         screen.value = Screen.AUTH
         return null
     }
 
+    private fun originErrorMessage(error: OriginError?): String =
+        getApplication<Application>().getString(
+            when (error) {
+                OriginError.HTTPS_REQUIRED -> R.string.origin_https_required
+                OriginError.CREDENTIALS -> R.string.origin_no_credentials
+                OriginError.ORIGIN_ONLY -> R.string.origin_only
+                OriginError.INVALID_PORT -> R.string.origin_invalid_port
+                else -> R.string.origin_invalid
+            },
+        )
+
+    fun retryAuthentication() {
+        oauth.configuredOrigin()?.let(::beginAuthentication)
+    }
+
+    fun cancelPendingAuthentication() {
+        authorizationGeneration += 1
+        callbackJob?.cancel()
+        callbackJob = null
+        work.value = false
+        oauth.cancelAuthorization()
+    }
+
     fun currentAuthorizationUrl() = authorizationUrl
 
-    fun callbackReceived() =
-        viewModelScope.launch {
-            work.value = true
-            runCatching { oauth.consumeCallback() }
-                .onSuccess { result ->
-                    when (result) {
-                        true -> {
-                            message.value = null
-                            settingsStore.update { current -> current.copy(onboardingStep = OnboardingStep.CONNECTION_POLICY) }
-                            screen.value = Screen.ONBOARDING_POLICY
+    fun callbackReceived() {
+        if (callbackJob?.isActive == true) return
+        val generation = authorizationGeneration
+        callbackJob =
+            viewModelScope.launch {
+                work.value = true
+                runCatching { oauth.consumeCallback() }
+                    .onSuccess { result ->
+                        if (generation != authorizationGeneration) return@onSuccess
+                        when (result) {
+                            true -> {
+                                message.value = null
+                                settingsStore.update { current ->
+                                    if (generation == authorizationGeneration) current.copy(onboardingStep = OnboardingStep.CONNECTION_POLICY) else current
+                                }
+                                if (generation == authorizationGeneration) screen.value = Screen.ONBOARDING_POLICY
+                            }
+                            false -> returnToSetupAfterTokenFailure()
+                            null -> Unit
                         }
-                        false -> message.value = "Sign-in could not be completed"
-                        null -> Unit
                     }
-                }
-                .onFailure { error ->
-                    Log.e("KarooHassOAuth", "Token exchange failed", error)
-                    message.value = "Could not finish sign-in: ${error.message ?: "Wi-Fi is required"}"
-                }
-            work.value = false
-        }
+                    .onFailure { error ->
+                        if (generation != authorizationGeneration) return@onFailure
+                        Log.e("KarooHassOAuth", "Token exchange failed", error)
+                        returnToSetupAfterTokenFailure()
+                    }
+                if (generation == authorizationGeneration) work.value = false
+            }
+    }
+
+    private fun returnToSetupAfterTokenFailure() {
+        oauth.cancelAuthorization()
+        message.value = getApplication<Application>().getString(R.string.oauth_token_error)
+        screen.value = Screen.SETUP
+    }
 
     fun oauthCallbackFailed() {
         message.value = getApplication<Application>().getString(R.string.oauth_callback_incomplete)

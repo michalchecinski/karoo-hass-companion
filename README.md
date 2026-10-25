@@ -29,6 +29,15 @@ Assistant traffic.
 - Turn on outdoor or entrance lights when coming home after dark.
 - Run a script near the end of your ride to prepare a comfortable temperature at home before you return.
 
+## Connecting to Home Assistant
+
+Use your Home Assistant HTTPS address and port, reachable from the Karoo, with a
+trusted certificate valid for that address. Local HTTPS can work; an HTTP-only
+local address is currently unsupported. Addresses entered without a scheme use
+HTTPS. If sign-in fails, use **Edit address** or **Try again** and follow the error
+guidance. The GitHub Pages URL identifies the OAuth client; it does not proxy your
+Home Assistant credentials or API traffic.
+
 ## Screenshots
 
 ![Quick Access](screenshots/emulator-karoo-480x800/main-empty-app-only.png)

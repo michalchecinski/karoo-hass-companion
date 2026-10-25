@@ -12,8 +12,9 @@ import com.karoohass.network.DirectWifiTransport
 import com.karoohass.network.HttpRequest
 import com.karoohass.network.HttpTransport
 import com.karoohass.security.TokenStore
+import kotlinx.coroutines.sync.Mutex
+import kotlinx.coroutines.sync.withLock
 import org.json.JSONObject
-import java.net.URI
 import java.net.URLEncoder
 import java.security.SecureRandom
 
@@ -37,19 +38,18 @@ internal fun validateOAuthCallback(
         else -> OAuthCallbackReceipt.ACCEPTED
     }
 
-class OAuthManager(private val context: Context, private val tokenStore: TokenStore) {
+class OAuthManager(private val context: Context, private val tokenStore: TokenStore, private val directTransport: HttpTransport = DirectWifiTransport(context)) {
+    private val callbackMutex = Mutex()
     private val prefs = context.getSharedPreferences("oauth", Context.MODE_PRIVATE)
     private val clientId = context.getString(R.string.oauth_client_id)
     private val redirectUri = context.getString(R.string.oauth_redirect_uri)
 
-    fun normalizeOrigin(raw: String): String? =
-        runCatching {
-            val uri = URI(if (raw.startsWith("https://")) raw else "https://$raw")
-            require(uri.scheme == "https" && !uri.host.isNullOrBlank() && (uri.path.isNullOrBlank() || uri.path == "/") && uri.query == null && uri.fragment == null)
-            URI("https", null, uri.host, if (uri.port == 443) -1 else uri.port, null, null, null).toString()
-        }.getOrNull()
+    fun normalizeOrigin(raw: String): String? = validateHomeAssistantOrigin(raw).origin
+
+    fun cancelAuthorization() = clearCallback()
 
     fun authorizationUrl(origin: String): String {
+        clearCallback()
         val state = ByteArray(32).also(SecureRandom()::nextBytes).let { Base64.encodeToString(it, Base64.URL_SAFE or Base64.NO_WRAP or Base64.NO_PADDING) }
         prefs.edit().putString("state", state).putString("origin", origin).apply()
         return "$origin/auth/authorize?client_id=${encode(clientId)}&redirect_uri=${encode(redirectUri)}&response_type=code&state=${encode(state)}"
@@ -58,24 +58,28 @@ class OAuthManager(private val context: Context, private val tokenStore: TokenSt
     fun configuredOrigin(): String? = prefs.getString("origin", null)?.let(::normalizeOrigin)
 
     /** null means that the app was merely resumed, rather than launched by OAuth. */
-    suspend fun consumeCallback(): Boolean? {
-        val code = prefs.getString("code", null) ?: return null
-        val state = prefs.getString("callbackState", null)
-        if (state != prefs.getString("state", null)) {
+    suspend fun consumeCallback(): Boolean? =
+        callbackMutex.withLock {
+            val code = prefs.getString("code", null) ?: return@withLock null
+            val expectedState = prefs.getString("state", null)
+            val state = prefs.getString("callbackState", null)
+            if (state != expectedState) {
+                clearCallback()
+                return@withLock false
+            }
+            val origin = prefs.getString("origin", null) ?: return@withLock false
+            Log.d("KarooHassOAuth", "Exchanging Home Assistant authorization code over Wi-Fi")
+            val response = directTransport.execute(HttpRequest("POST", "$origin/auth/token", mapOf("Content-Type" to "application/x-www-form-urlencoded"), "grant_type=authorization_code&code=${encode(code)}&client_id=${encode(clientId)}".toByteArray()))
+            Log.d("KarooHassOAuth", "Home Assistant token response: HTTP ${response.code}")
+            // An edited/retried attempt must not save stale credentials or clear new state.
+            if (expectedState != prefs.getString("state", null) || code != prefs.getString("code", null)) return@withLock null
+            if (response.code !in 200..299 || response.body == null) return@withLock false
+            val body = JSONObject(String(response.body))
+            val expires = body.optLong("expires_in", 1800)
+            tokenStore.save(com.karoohass.security.Tokens(body.getString("access_token"), body.optString("refresh_token").ifBlank { null }, System.currentTimeMillis() + expires * 1000))
             clearCallback()
-            return false
+            return@withLock true
         }
-        val origin = prefs.getString("origin", null) ?: return false
-        Log.d("KarooHassOAuth", "Exchanging Home Assistant authorization code over Wi-Fi")
-        val response = DirectWifiTransport(context).execute(HttpRequest("POST", "$origin/auth/token", mapOf("Content-Type" to "application/x-www-form-urlencoded"), "grant_type=authorization_code&code=${encode(code)}&client_id=${encode(clientId)}".toByteArray()))
-        Log.d("KarooHassOAuth", "Home Assistant token response: HTTP ${response.code}")
-        if (response.code !in 200..299 || response.body == null) return false
-        val body = JSONObject(String(response.body))
-        val expires = body.optLong("expires_in", 1800)
-        tokenStore.save(com.karoohass.security.Tokens(body.getString("access_token"), body.optString("refresh_token").ifBlank { null }, System.currentTimeMillis() + expires * 1000))
-        clearCallback()
-        return true
-    }
 
     suspend fun refresh(transport: HttpTransport = DirectWifiTransport(context)): Boolean {
         val tokens = tokenStore.load() ?: return false

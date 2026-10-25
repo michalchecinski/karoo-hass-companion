@@ -1,12 +1,5 @@
 package com.karoohass.screens
 
-import android.annotation.SuppressLint
-import android.content.Intent
-import android.net.Uri
-import android.util.Log
-import android.webkit.WebResourceRequest
-import android.webkit.WebView
-import android.webkit.WebViewClient
 import androidx.annotation.StringRes
 import androidx.compose.foundation.Image
 import androidx.compose.foundation.clickable
@@ -64,13 +57,10 @@ import androidx.compose.ui.text.input.PasswordVisualTransformation
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
-import androidx.compose.ui.viewinterop.AndroidView
 import com.karoohass.MainViewModel
 import com.karoohass.R
 import com.karoohass.Screen
 import com.karoohass.UiState
-import com.karoohass.auth.OAuthCallbackActivity
-import com.karoohass.auth.isOAuthCallbackUri
 import com.karoohass.core.ActionKind
 import com.karoohass.core.ActionOutcome
 import com.karoohass.core.ConnectionPolicy
@@ -114,7 +104,13 @@ fun MainScreen(
                         Home(state, model::invoke, model::openSetup, model::retryHomeAssistantConnection)
                     }
                 Screen.SETUP -> Setup(state, model)
-                Screen.AUTH -> OAuthWebView(model.currentAuthorizationUrl())
+                Screen.AUTH ->
+                    OAuthWebView(
+                        model.currentAuthorizationUrl(),
+                        onRetry = model::retryAuthentication,
+                        onEditAddress = model::back,
+                        onFailure = model::cancelPendingAuthentication,
+                    )
                 Screen.ONBOARDING_POLICY -> OnboardingPolicy(state, model)
                 Screen.ONBOARDING_PIN -> OnboardingPin(state, model)
                 Screen.MANAGE -> Manage(state, model)
@@ -309,7 +305,7 @@ private fun HomeAssistantIcon(
     state: UiState,
     model: MainViewModel,
 ) {
-    var url by remember(state.settings.origin) { mutableStateOf(state.settings.origin ?: "https://") }
+    var url by rememberSaveable(state.settings.origin) { mutableStateOf(state.settings.origin ?: "https://") }
     var pin by remember { mutableStateOf("") }
     var selectedPinMode by remember(state.settings.pinMode) { mutableStateOf(state.settings.pinMode) }
     var error by remember { mutableStateOf<String?>(null) }
@@ -592,53 +588,6 @@ private fun PinMode.description() =
         PinMode.WHOLE_APP -> "Require the PIN before Quick Access can be used."
         PinMode.SELECTED_ACTIONS -> "Require the PIN only for actions you mark as protected."
     }
-
-@SuppressLint("SetJavaScriptEnabled")
-@Composable
-private fun OAuthWebView(
-    url: String?,
-) {
-    if (url == null) {
-        Text("Missing Home Assistant URL", Modifier.padding(16.dp))
-        return
-    }
-    AndroidView(
-        factory = { context ->
-            WebView(context).apply {
-                settings.javaScriptEnabled = true
-                webViewClient =
-                    object : WebViewClient() {
-                        override fun shouldOverrideUrlLoading(
-                            view: WebView,
-                            request: WebResourceRequest,
-                        ): Boolean {
-                            return openOAuthCallback(context, request.url)
-                        }
-
-                        @Deprecated("Deprecated in Java")
-                        override fun shouldOverrideUrlLoading(
-                            view: WebView,
-                            url: String,
-                        ): Boolean {
-                            return openOAuthCallback(context, Uri.parse(url))
-                        }
-                    }
-                loadUrl(url)
-            }
-        },
-        modifier = Modifier.fillMaxSize(),
-    )
-}
-
-private fun openOAuthCallback(
-    context: android.content.Context,
-    uri: Uri,
-): Boolean {
-    if (!isOAuthCallbackUri(uri.scheme, uri.host, uri.path)) return false
-    Log.d("KarooHassOAuth", "Received Home Assistant authorization callback")
-    context.startActivity(Intent(context, OAuthCallbackActivity::class.java).setData(uri))
-    return true
-}
 
 @Composable private fun Manage(
     state: UiState,

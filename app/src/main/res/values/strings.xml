@@ -2,8 +2,8 @@
     <string name="app_name">Karoo HASS</string>
     <string name="oauth_client_id">https://michalchecinski.github.io/karoo-hass-companion/</string>
     <string name="oauth_redirect_uri">karoohass://auth-callback</string>
-    <string name="setup_origin_help">Enter a trusted HTTPS address reachable from your Karoo.</string>
-    <string name="setup_privacy_notice">Privacy: This app connects directly to your Home Assistant. The sign-in webpage only identifies the app; it never proxies traffic.</string>
+    <string name="setup_origin_help">Use a trusted HTTPS address reachable from the Karoo. HTTP-only addresses are not supported.</string>
+    <string name="setup_privacy_notice">Privacy: Traffic goes directly to Home Assistant. GitHub Pages identifies the app; it does not proxy traffic.</string>
     <string name="continue_to_home_assistant">Continue to Home Assistant</string>
     <string name="oauth_callback_incomplete">Sign-in callback was incomplete. Please try again.</string>
     <string name="erase_account">Forgot PIN / erase this account</string>
@@ -44,4 +44,16 @@
     <string name="quick_access_completed">Completed</string>
     <string name="quick_access_failed">Failed</string>
     <string name="quick_access_outcome_uncertain">Outcome uncertain</string>
+    <string name="origin_https_required">This version requires HTTPS. Enter your Home Assistant HTTPS address.</string>
+    <string name="origin_invalid">Enter a valid Home Assistant address, such as https://home.example.com:8123.</string>
+    <string name="origin_no_credentials">Enter the address without a username or password. You will sign in on Home Assistant.</string>
+    <string name="origin_only">Enter only the Home Assistant address and port, without a path, query, or fragment.</string>
+    <string name="origin_invalid_port">Enter a port between 1 and 65535, or omit the port.</string>
+    <string name="oauth_connection_failed">Couldn\'t open Home Assistant</string>
+    <string name="oauth_tls_error">Couldn\'t establish a secure connection. Check the address and port. If this address works only with http://, this version cannot use it.</string>
+    <string name="oauth_certificate_error">Home Assistant\'s certificate could not be verified. Use an address with a trusted certificate valid for that address. Check the Karoo\'s date and time.</string>
+    <string name="oauth_network_error">Check the address, the Karoo\'s Wi-Fi connection, and whether Home Assistant is reachable, then try again.</string>
+    <string name="oauth_http_error">The sign-in page returned an error. Check the address and Home Assistant or its reverse proxy, then try again.</string>
+    <string name="oauth_edit_address">Edit address</string>
+    <string name="oauth_token_error">Couldn\'t finish sign-in. Check the Karoo\'s Wi-Fi connection and Home Assistant address, then sign in again.</string>
 </resources>

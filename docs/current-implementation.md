@@ -7,7 +7,26 @@ useful record of the intended scope but does not capture all later UX changes.
 ## Home Assistant connection
 
 - The app accepts a system-trusted HTTPS Home Assistant origin reachable from
-  the Karoo and normalizes it before authentication.
+  the Karoo and normalizes it before authentication. Surrounding whitespace and
+  scheme casing are accepted; scheme-less hosts and IP addresses use HTTPS.
+  Explicit HTTP, embedded credentials, non-root paths, queries, fragments, and
+  invalid ports are rejected with specific guidance. Syntactic acceptance does
+  not establish certificate trust or reachability.
+- Sign-in connection failures show an app recovery screen with **Edit address**
+  and **Try again**. TLS negotiation, certificate, network, and HTTP page errors
+  have separate guidance. Only main-document errors replace the page; invalid
+  subresource certificates are still cancelled. The WebView certificate callback
+  has no main-frame flag, so a certificate error is attributed to the main document
+  only when its URL matches the tracked main-document navigation URL.
+- Retrying starts a fresh OAuth state nonce. Editing or leaving sign-in cancels
+  the pending authorization; late callbacks from a disposed WebView are ignored.
+  Replaced token exchanges cannot save stale credentials. Token exchange failure
+  returns to Setup with Wi-Fi/address guidance. Successful callbacks retain the
+  authorization code until it can be consumed, even when the WebView is disposed.
+- HTTP-only local endpoints remain unsupported. Local HTTPS is supported when
+  reachable and trusted; external/public access is not inherently required.
+  Optional local HTTP remains an [investigation](https://github.com/michalchecinski/karoo-hass-companion/issues/33),
+  not a planned feature. No cleartext exception or certificate bypass is added.
 - Authentication uses Home Assistant OAuth in an embedded WebView. It uses the
   GitHub Pages client ID `https://michalchecinski.github.io/karoo-hass-companion/`
   only to identify the app to Home Assistant; Home Assistant returns the

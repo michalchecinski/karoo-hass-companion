@@ -27,3 +27,30 @@ callback route.
   authentication provider.
 - Existing saved tokens remain valid; only future sign-ins use the direct
   callback.
+
+## HTTPS onboarding and recovery
+
+Setup requires a Home Assistant HTTPS origin with a certificate trusted by the
+Karoo and valid for the entered address. A private IP is not inherently invalid,
+but adding `https://` cannot make an HTTP-only endpoint support TLS. Bare hosts
+and IPs default to HTTPS; explicit HTTP is rejected before sign-in opens.
+
+Main-document TLS, certificate, network, and HTTP failures offer **Edit address**
+and **Try again**. TLS guidance describes an HTTP-only endpoint as a possibility,
+not a diagnosis. Certificate errors always cancel loading; there is no bypass.
+Errors in unrelated subresources do not replace the complete sign-in page.
+Retry replaces pending OAuth state and callback data. Edit/Back cancels the pending
+attempt, while disposing the WebView after a successful callback preserves the
+code for token exchange. Concurrent consumption exchanges a code once; an exchange
+from a replaced attempt cannot overwrite credentials or advance onboarding.
+Token exchange failures return to Setup for a deliberate new sign-in.
+
+This change does not alter Android network security configuration or direct Wi-Fi
+and Companion transport selection. WebView traffic still uses Android's default
+routing; this does not establish Wi-Fi binding for the embedded login page.
+Optional HTTP support is tracked solely as an investigation in
+[issue #33](https://github.com/michalchecinski/karoo-hass-companion/issues/33).
+
+Platform behavior follows Android's [WebViewClient error callbacks](https://developer.android.com/reference/android/webkit/WebViewClient):
+nonrecoverable TLS errors use `onReceivedError`, while certificate errors use
+`onReceivedSslError`, which must cancel rather than proceed.
