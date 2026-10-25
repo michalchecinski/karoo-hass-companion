@@ -57,7 +57,7 @@ class OAuthWebViewTest {
                 }
             }
             composeRule.waitUntil(20_000) { composeRule.onAllNodesWithText("Couldn't open Home Assistant").fetchSemanticsNodes().isNotEmpty() }
-            composeRule.onNodeWithText("Couldn\'t establish a secure connection. Check the address and port. If this address works only with http://, this version cannot use it.").assertIsDisplayed()
+            composeRule.onNodeWithText("Couldn\'t establish a secure connection. Check the address and port. HTTP-only addresses are not supported.").assertIsDisplayed()
             composeRule.onNodeWithText("Edit address").performScrollTo().performClick()
             composeRule.onNodeWithText("Try again").performScrollTo().performClick()
             assertEquals(1, failures)
