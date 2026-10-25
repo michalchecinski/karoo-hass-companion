@@ -34,12 +34,12 @@ git config --local core.hooksPath .git-hooks
 ## Pull requests
 
 For UI screenshots, follow the repository's
-[`karoo-screenshots` skill](.codex/skills/karoo-screenshots/SKILL.md): use a
+[`karoo-screenshots` skill](.agents/skills/karoo-screenshots/SKILL.md): use a
 dedicated emulator and inspect a temporary capture before replacing an image.
 Its capture safeguards can be tested on macOS without starting an emulator:
 
 ```bash
-python3 .codex/skills/karoo-screenshots/scripts/test_capture_app_only.py
+python3 .agents/skills/karoo-screenshots/scripts/test_capture_app_only.py
 ```
 
 1. Create a descriptive branch and keep the change focused.

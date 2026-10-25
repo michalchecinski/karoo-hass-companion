@@ -24,14 +24,14 @@ Run from the repository root after starting the dedicated emulator. Supply its
 serial, a temporary candidate path, and its exact AVD name:
 
 ```sh
-.codex/skills/karoo-screenshots/scripts/capture-app-only.sh emulator-5560 /tmp/karoo-hass-capture-issue-24/settings-connected-app-only.png karoo-hass-capture-issue-24
+.agents/skills/karoo-screenshots/scripts/capture-app-only.sh emulator-5560 /tmp/karoo-hass-capture-issue-24/settings-connected-app-only.png karoo-hass-capture-issue-24
 ```
 
 The script requires macOS `sips` and expects `com.karoohass` in the foreground.
 Use `adb -s <serial> emu avd name` and `adb -s <serial> shell wm size` to verify
 the dedicated profile before navigating. Replace the example serial and suffix
 with those allocated to the current task. Run its regression checks with
-`python3 .codex/skills/karoo-screenshots/scripts/test_capture_app_only.py`.
+`python3 .agents/skills/karoo-screenshots/scripts/test_capture_app_only.py`.
 
 ## Asset rules
 
