@@ -12,6 +12,10 @@ import com.karoohass.screens.MainScreen
 import com.karoohass.theme.AppTheme
 
 class MainActivity : ComponentActivity() {
+    companion object {
+        const val ACTION_OPEN_QUICK_ACCESS = "com.karoohass.OPEN_QUICK_ACCESS"
+    }
+
     private val model by viewModels<MainViewModel>()
 
     override fun onCreate(savedInstanceState: Bundle?) {
@@ -23,12 +27,14 @@ class MainActivity : ComponentActivity() {
             }
         }
         handleOAuthCallbackError(intent)
+        handleQuickAccessIntent(intent)
     }
 
     override fun onNewIntent(intent: Intent) {
         super.onNewIntent(intent)
         setIntent(intent)
         handleOAuthCallbackError(intent)
+        handleQuickAccessIntent(intent)
     }
 
     override fun onResume() {
@@ -41,6 +47,14 @@ class MainActivity : ComponentActivity() {
     override fun onStop() {
         model.foregroundChanged(false)
         super.onStop()
+    }
+
+    private fun handleQuickAccessIntent(intent: Intent) {
+        if (intent.action == ACTION_OPEN_QUICK_ACCESS) {
+            // Retain the normal whole-app PIN and onboarding gates.
+            model.openQuickAccess()
+            intent.action = null
+        }
     }
 
     private fun handleOAuthCallbackError(intent: Intent) {

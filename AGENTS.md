@@ -9,6 +9,14 @@ The project is built using:
 
 Do not update any dependencies if not asked or allowed directly.
 
+## Local working notes
+
+Keep generated planning and review notes, including `expert-prompt.md` and
+`expert-team.md`, outside the repository in a task-specific directory under
+`/tmp`. This applies even when a skill suggests saving those notes in the
+workspace. Do not stage or commit them unless the user explicitly requests
+them as deliverables. Product and feature documentation belongs in `docs`.
+
 ## Docs
 
 Before specification, planning, or implementation, read `docs` folders to identify conventions, product boundaries, and other information relevant to the change.

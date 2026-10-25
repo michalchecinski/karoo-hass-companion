@@ -13,6 +13,7 @@ import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.heightIn
+import androidx.compose.foundation.layout.imePadding
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
@@ -21,8 +22,11 @@ import androidx.compose.foundation.lazy.LazyRow
 import androidx.compose.foundation.lazy.grid.GridCells
 import androidx.compose.foundation.lazy.grid.LazyVerticalGrid
 import androidx.compose.foundation.lazy.items
+import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.selection.toggleable
 import androidx.compose.foundation.text.KeyboardActions
 import androidx.compose.foundation.text.KeyboardOptions
+import androidx.compose.foundation.verticalScroll
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Button
 import androidx.compose.material3.ButtonDefaults
@@ -38,19 +42,27 @@ import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.RadioButton
 import androidx.compose.material3.Scaffold
+import androidx.compose.material3.Switch
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
+import androidx.compose.runtime.withFrameNanos
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.focus.FocusRequester
+import androidx.compose.ui.focus.focusRequester
+import androidx.compose.ui.platform.LocalSoftwareKeyboardController
+import androidx.compose.ui.platform.LocalWindowInfo
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.res.stringResource
+import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.text.input.ImeAction
 import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.text.input.PasswordVisualTransformation
@@ -141,7 +153,9 @@ fun MainScreen(
                     Text("Done")
                 }
             }
-            if (displayedScreen != Screen.SETUP) state.message?.let { Text(it, Modifier.align(Alignment.BottomCenter).padding(12.dp), color = MaterialTheme.colorScheme.error) }
+            if (displayedScreen != Screen.SETUP && displayedScreen != Screen.PIN) {
+                state.message?.let { Text(it, Modifier.align(Alignment.BottomCenter).padding(12.dp), color = MaterialTheme.colorScheme.error) }
+            }
         }
     }
     state.confirmation?.takeIf { displayedScreen == Screen.HOME }?.let { resolved ->
@@ -233,7 +247,15 @@ internal fun Home(
                                 color = if (entity?.available == false) MaterialTheme.colorScheme.error else MaterialTheme.colorScheme.onSurfaceVariant,
                             )
                         }
-                        if (action.kind in setOf(ActionKind.CONTROL_LOCK, ActionKind.CONTROL_COVER)) {
+                        if (action.kind == ActionKind.SET_COVER_POSITION) {
+                            Text(
+                                stringResource(R.string.quick_access_position_target, action.targetPosition ?: 0),
+                                modifier = Modifier.fillMaxWidth(),
+                                textAlign = TextAlign.Center,
+                                style = MaterialTheme.typography.bodySmall,
+                            )
+                        }
+                        if (action.kind in setOf(ActionKind.CONTROL_LOCK, ActionKind.CONTROL_COVER, ActionKind.SET_COVER_POSITION)) {
                             Text(
                                 when {
                                     actionOutcome != null -> stringResource(actionOutcome.statusResource())
@@ -349,6 +371,27 @@ private fun HomeAssistantIcon(
             }
         }
         if (state.settings.onboardingStep == OnboardingStep.COMPLETE) {
+            item {
+                Row(
+                    Modifier.fillMaxWidth().toggleable(
+                        value = state.settings.rideEndNotificationEnabled,
+                        role = androidx.compose.ui.semantics.Role.Switch,
+                        onValueChange = model::saveRideEndNotification,
+                    ),
+                    verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.spacedBy(12.dp),
+                ) {
+                    Column(Modifier.weight(1f)) {
+                        Text(stringResource(R.string.ride_ended_notification_setting))
+                        Text(stringResource(R.string.ride_ended_notification_description), style = MaterialTheme.typography.bodySmall)
+                    }
+                    androidx.compose.material3.Switch(
+                        checked = state.settings.rideEndNotificationEnabled,
+                        onCheckedChange = null,
+                    )
+                }
+            }
+            item { SoundFeedbackSetting(state.settings.soundFeedbackEnabled, model::saveSoundFeedback) }
             item { Text("Connection policy") }
             item {
                 ConnectionPolicy.entries.forEach { policy ->
@@ -594,6 +637,7 @@ private fun PinMode.description() =
     model: MainViewModel,
 ) {
     var selected by remember { mutableStateOf<EntitySnapshot?>(null) }
+    var addingPositionPreset by remember { mutableStateOf(false) }
     var protect by remember { mutableStateOf(false) }
     var confirm by remember { mutableStateOf(false) }
     var query by rememberSaveable { mutableStateOf("") }
@@ -685,10 +729,38 @@ private fun PinMode.description() =
         }
     }
     selected?.let { entity ->
-        ActionPicker(entity, protect, confirm, { protect = it }, { confirm = it }, { kind ->
-            model.add(entity, kind, protect, confirm)
-            selected = null
-        }, entity.availableActionKinds().any { kind -> hasActionIdentity(state.settings.actions, entity.entityId, kind) }, { selected = null })
+        if (addingPositionPreset) {
+            PositionPresetDialog(
+                entity = entity,
+                alreadyAdded = { target ->
+                    hasActionIdentity(state.settings.actions, entity.entityId, ActionKind.SET_COVER_POSITION, target)
+                },
+                add = { target ->
+                    model.add(entity, ActionKind.SET_COVER_POSITION, protect, confirm, target)
+                    addingPositionPreset = false
+                    selected = null
+                },
+                dismiss = { addingPositionPreset = false },
+            )
+        } else {
+            ActionPicker(
+                entity = entity,
+                protect = protect,
+                confirmation = confirm,
+                setProtect = { protect = it },
+                setConfirmation = { confirm = it },
+                add = { kind ->
+                    if (kind == ActionKind.SET_COVER_POSITION) {
+                        addingPositionPreset = true
+                    } else {
+                        model.add(entity, kind, protect, confirm)
+                        selected = null
+                    }
+                },
+                alreadyAdded = { kind -> hasActionIdentity(state.settings.actions, entity.entityId, kind) },
+                dismiss = { selected = null },
+            )
+        }
     }
 }
 
@@ -700,7 +772,7 @@ internal fun ActionPicker(
     setProtect: (Boolean) -> Unit,
     setConfirmation: (Boolean) -> Unit,
     add: (ActionKind) -> Unit,
-    alreadyAdded: Boolean,
+    alreadyAdded: (ActionKind) -> Boolean,
     dismiss: () -> Unit,
 ) {
     val kinds = entity.availableActionKinds()
@@ -719,6 +791,7 @@ internal fun ActionPicker(
                             singleKind == ActionKind.ACTIVATE_SCENE -> R.string.action_picker_add_scene_activation
                             singleKind == ActionKind.CONTROL_LOCK -> R.string.action_picker_add_lock_control
                             singleKind == ActionKind.CONTROL_COVER -> R.string.action_picker_add_cover_control
+                            singleKind == ActionKind.SET_COVER_POSITION -> R.string.action_picker_add_cover_position
                             else -> R.string.action_picker_choose_operation
                         },
                     ),
@@ -735,18 +808,74 @@ internal fun ActionPicker(
                     if (singleKind == ActionKind.CONTROL_LOCK) Text(stringResource(R.string.action_picker_unlock_always_confirmed), style = MaterialTheme.typography.bodySmall)
                     if (singleKind == ActionKind.CONTROL_COVER) Text(stringResource(R.string.action_picker_open_always_confirmed), style = MaterialTheme.typography.bodySmall)
                 }
-                if (alreadyAdded) Text(stringResource(R.string.action_picker_already_added), color = MaterialTheme.colorScheme.error)
-                if (singleKind == null) kinds.forEach { kind -> TextButton(onClick = { add(kind) }) { Text(stringResource(kind.labelResource())) } }
+                if (singleKind != null && alreadyAdded(singleKind)) Text(stringResource(R.string.action_picker_already_added), color = MaterialTheme.colorScheme.error)
+                if (singleKind == null) {
+                    kinds.forEach { kind ->
+                        TextButton(onClick = { add(kind) }, enabled = !alreadyAdded(kind)) {
+                            Text(stringResource(kind.labelResource()))
+                        }
+                    }
+                }
             }
         },
         confirmButton = {
             if (singleKind != null) {
                 TextButton(
                     onClick = { add(singleKind) },
-                    enabled = !alreadyAdded,
+                    enabled = !alreadyAdded(singleKind),
                     modifier = Modifier.testTag("action-picker-add"),
                 ) { Text(stringResource(R.string.action_picker_add)) }
             }
+        },
+        dismissButton = { TextButton(onClick = dismiss) { Text(stringResource(R.string.action_picker_cancel)) } },
+    )
+}
+
+@Composable
+internal fun PositionPresetDialog(
+    entity: EntitySnapshot,
+    alreadyAdded: (Int) -> Boolean,
+    add: (Int) -> Unit,
+    dismiss: () -> Unit,
+) {
+    var target by remember { mutableStateOf("") }
+    val targetValue = target.toIntOrNull()
+    val invalidTarget = targetValue == null || targetValue !in 1..99
+    val duplicateTarget = targetValue != null && alreadyAdded(targetValue)
+    val error =
+        when {
+            target.isBlank() -> null
+            invalidTarget -> R.string.position_preset_invalid_target
+            duplicateTarget -> R.string.position_preset_duplicate_target
+            else -> null
+        }
+    val validTarget = targetValue?.takeIf { !invalidTarget && !duplicateTarget }
+    AlertDialog(
+        onDismissRequest = dismiss,
+        title = { Text(entity.friendlyName) },
+        text = {
+            Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                Text(stringResource(R.string.position_preset_explanation))
+                OutlinedTextField(
+                    value = target,
+                    onValueChange = { target = it },
+                    label = { Text(stringResource(R.string.position_preset_target_label)) },
+                    suffix = { Text("%") },
+                    singleLine = true,
+                    isError = error != null,
+                    keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number, imeAction = ImeAction.Done),
+                    keyboardActions = KeyboardActions(onDone = { validTarget?.let(add) }),
+                    modifier = Modifier.fillMaxWidth().testTag("position-preset-target"),
+                )
+                error?.let { Text(stringResource(it), color = MaterialTheme.colorScheme.error) }
+            }
+        },
+        confirmButton = {
+            TextButton(
+                onClick = { validTarget?.let(add) },
+                enabled = validTarget != null,
+                modifier = Modifier.testTag("position-preset-add"),
+            ) { Text(stringResource(R.string.action_picker_add)) }
         },
         dismissButton = { TextButton(onClick = dismiss) { Text(stringResource(R.string.action_picker_cancel)) } },
     )
@@ -760,6 +889,7 @@ private fun ActionKind.labelResource() =
         ActionKind.ACTIVATE_SCENE -> R.string.action_kind_activate
         ActionKind.CONTROL_LOCK -> R.string.action_kind_control_lock
         ActionKind.CONTROL_COVER -> R.string.action_kind_control_cover
+        ActionKind.SET_COVER_POSITION -> R.string.action_kind_set_cover_position
         ActionKind.TOGGLE -> R.string.action_kind_toggle
     }
 
@@ -768,17 +898,35 @@ private fun ActionKind.labelResource() =
     model: MainViewModel,
 ) {
     var pin by remember { mutableStateOf("") }
+    val focusRequester = remember { FocusRequester() }
+    val keyboard = LocalSoftwareKeyboardController.current
+    val windowFocused = LocalWindowInfo.current.isWindowFocused
+    LaunchedEffect(windowFocused, state.unlocking) {
+        if (windowFocused && !state.unlocking) {
+            // Wait for the enabled field to attach, then for its input session
+            // to start. An IME request before window/editor focus can be ignored.
+            withFrameNanos { }
+            focusRequester.requestFocus()
+            withFrameNanos { }
+            keyboard?.show()
+        }
+    }
     val unlock = {
         if (pin.length in 4..6) {
             model.submitPin(pin)
             pin = ""
         }
     }
-    Column(Modifier.fillMaxSize().padding(24.dp), verticalArrangement = Arrangement.Center, horizontalAlignment = Alignment.CenterHorizontally) {
+    Column(
+        Modifier.fillMaxSize().imePadding().verticalScroll(rememberScrollState()).padding(horizontal = 24.dp, vertical = 8.dp),
+        verticalArrangement = Arrangement.Center,
+        horizontalAlignment = Alignment.CenterHorizontally,
+    ) {
         Text("Enter PIN")
         OutlinedTextField(
             value = pin,
             onValueChange = { pin = it.filter(Char::isDigit).take(6) },
+            modifier = Modifier.focusRequester(focusRequester),
             singleLine = true,
             visualTransformation = PasswordVisualTransformation(),
             keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.NumberPassword, imeAction = ImeAction.Done),
@@ -786,7 +934,32 @@ private fun ActionKind.labelResource() =
             enabled = !state.unlocking,
         )
         Button(onClick = unlock, enabled = pin.length in 4..6 && !state.unlocking) { Text("Unlock") }
+        state.message?.let {
+            Text(
+                it,
+                modifier = Modifier.padding(top = 4.dp),
+                color = MaterialTheme.colorScheme.error,
+                style = MaterialTheme.typography.bodySmall,
+                textAlign = TextAlign.Center,
+            )
+        }
         if (state.unlocking) CircularProgressIndicator(Modifier.padding(top = 16.dp))
         state.pending?.let { Text(it.confirmationLabel(state.snapshots[it.action.entityId])) }
+    }
+}
+
+@Composable
+internal fun SoundFeedbackSetting(
+    enabled: Boolean,
+    onEnabledChanged: (Boolean) -> Unit,
+) {
+    Column(
+        Modifier.fillMaxWidth().toggleable(value = enabled, role = Role.Switch, onValueChange = onEnabledChanged),
+    ) {
+        Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+            Text(stringResource(R.string.sound_feedback_title), modifier = Modifier.weight(1f))
+            Switch(checked = enabled, onCheckedChange = null)
+        }
+        Text(stringResource(R.string.sound_feedback_description), style = MaterialTheme.typography.bodySmall)
     }
 }

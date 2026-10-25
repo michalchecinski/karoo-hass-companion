@@ -161,7 +161,9 @@ The product is not intended to be:
 - a Home Assistant server-management client;
 - a background automation or delayed-action system;
 - a project-operated cloud relay or hosted smart-home service; or
-- a ride data field, map layer, or background tracking extension.
+- a ride data field, map layer, or background tracking extension. A lightweight
+  ride-state listener may provide a notification shortcut after a ride ends;
+  it does not collect ride telemetry or execute home actions automatically.
 
 ## Platform constraints
 

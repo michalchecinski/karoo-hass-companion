@@ -1,0 +1,5 @@
+<?xml version="1.0" encoding="utf-8"?>
+<ExtensionInfo
+    id="karoo-hass"
+    displayName="@string/app_name"
+    icon="@mipmap/ic_launcher" />

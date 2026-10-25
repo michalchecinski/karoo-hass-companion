@@ -89,6 +89,11 @@ useful record of the intended scope but does not capture all later UX changes.
 - Lock and cover tiles show a readable current state plus the operation a tap
   will request. Transitional or jammed locks, unsupported cover directions,
   and unavailable entities explain why no action can currently be sent.
+- Cover tiles show Home Assistant's reported whole position when available.
+  Position-capable covers can also have multiple separately configured 1–99%
+  preset tiles. A preset refreshes state before it runs, always confirms a move
+  toward open, and reports an accepted request as **Requested** while polling
+  only to refresh its displayed state and position.
 - Tiles can be PIN-protected in selected-actions PIN mode. Tiles are disabled
   while an entity refresh or action request is in progress.
 - If Karoo opens without Wi-Fi, configured Quick Access controls automatically
@@ -103,9 +108,27 @@ useful record of the intended scope but does not capture all later UX changes.
 - Configured actions store the Home Assistant friendly name and icon and are
   refreshed when discovery finds a newer entity definition.
 
+## Ride-end shortcut
+
+- A Karoo extension service observes ride state while the app UI is closed.
+- After a recording or paused ride ends, a Control Center notification offers
+  **Open Karoo HASS**, opening Quick Access with the normal PIN protection.
+- Manual pauses, auto-pauses, and initial idle do not trigger a notification.
+- **Settings → Ride-end notification** enables or disables future reminders.
+  It defaults to on and persists across restarts.
+- Immediate banner presentation requires physical-device validation. See
+  [Ride-end notification](features/ride-end-notification.md) for platform limits
+  and the device test procedure.
+
 ## Managing actions
 
 - The Settings gear in the upper-right opens general settings.
+- **Sound feedback** in Settings optionally enables distinct Karoo beeps for
+  accepted requests and verified completion. Failure and uncertain outcomes
+  remain visual only. It defaults to off and preserves visual feedback. Stateless
+  actions, cover Stop, and cover position presets never produce a completion cue. See
+  [Optional sound feedback](features/sound-feedback.md) for patterns and hardware
+  verification limits.
 - **Manage Quick Access** opens the entity chooser. The chooser does not
   replace the general settings screen.
 - The chooser fetches supported Home Assistant entities over direct Wi-Fi,
@@ -132,8 +155,16 @@ useful record of the intended scope but does not capture all later UX changes.
 - PIN setup, disabling, and unlock verification run outside the UI thread.
   Each operation disables its controls and shows an in-progress spinner.
 - The keyboard Done/confirm action submits a valid unlock PIN.
+- Opening the unlock screen automatically focuses its masked PIN field and
+  requests the numeric password keyboard after the window and input session
+  are ready. This also applies when returning to a locked app or retrying an
+  incorrect PIN. See [PIN keyboard](features/pin-keyboard.md).
+- The PIN layout keeps its field and Unlock button above the keyboard and can
+  scroll when additional action text needs more room.
 - An incorrect unlock attempt immediately clears the masked input. A later
   successful unlock clears the prior error message.
+- Incorrect-PIN and lockout feedback sits below Unlock inside the scrollable
+  PIN layout, so it does not overlap the field or button with the keyboard open.
 - Disabling protection requires verification of the current PIN, clears the
   verifier only after success, and confirms the result inline in Settings.
 - Whole-app PIN protection prevents entity-state traffic and Quick Access

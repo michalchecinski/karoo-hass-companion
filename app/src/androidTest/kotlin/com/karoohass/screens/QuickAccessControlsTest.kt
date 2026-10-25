@@ -13,6 +13,7 @@ import androidx.compose.ui.test.onAllNodesWithText
 import androidx.compose.ui.test.onNodeWithTag
 import androidx.compose.ui.test.onNodeWithText
 import androidx.compose.ui.test.performClick
+import androidx.compose.ui.test.performTextInput
 import com.karoohass.ConnectionStatus
 import com.karoohass.UiState
 import com.karoohass.core.ActionKind
@@ -103,7 +104,7 @@ class QuickAccessControlsTest {
         val button = snapshot("button.garage", "button", "unknown", friendlyName = "Garage remote")
         composeRule.setContent {
             AppTheme {
-                ActionPicker(button, false, false, {}, {}, {}, alreadyAdded = true, dismiss = {})
+                ActionPicker(button, false, false, {}, {}, {}, alreadyAdded = { true }, dismiss = {})
             }
         }
 
@@ -121,7 +122,7 @@ class QuickAccessControlsTest {
         var added: ActionKind? = null
         composeRule.setContent {
             AppTheme {
-                ActionPicker(scene, protect, confirm, { protect = it }, { confirm = it }, { added = it }, alreadyAdded = false, dismiss = {})
+                ActionPicker(scene, protect, confirm, { protect = it }, { confirm = it }, { added = it }, alreadyAdded = { false }, dismiss = {})
             }
         }
 
@@ -135,6 +136,62 @@ class QuickAccessControlsTest {
         }
         composeRule.onNodeWithTag("action-picker-add").performClick()
         composeRule.runOnIdle { assertEquals(ActionKind.ACTIVATE_SCENE, added) }
+    }
+
+    @Test
+    fun coverPresetTileShowsCurrentAndTargetPosition() {
+        val preset = action("preset-id", "cover.garage", ActionKind.SET_COVER_POSITION, "Garage").copy(targetPosition = 60)
+        val cover = snapshot(preset.entityId, "cover", "open").copy(currentPosition = 45)
+        val state = homeState(listOf(preset), mapOf(preset.entityId to cover), ActionOutcome.REQUESTED, preset.id)
+
+        composeRule.setContent { AppTheme { Home(state, {}, {}) } }
+
+        composeRule.onNodeWithText("Open • 45%").assertIsDisplayed()
+        composeRule.onNodeWithText("Target: 60%").assertIsDisplayed()
+        composeRule.onNodeWithText("Requested").assertIsDisplayed()
+    }
+
+    @Test
+    fun positionPresetDialogRejectsInvalidAndDuplicateTargets() {
+        val cover = snapshot("cover.garage", "cover", "open", friendlyName = "Garage")
+        composeRule.setContent {
+            AppTheme {
+                PositionPresetDialog(cover, alreadyAdded = { it == 55 }, add = {}, dismiss = {})
+            }
+        }
+
+        composeRule.onNodeWithTag("position-preset-target").performTextInput("100")
+        composeRule.onNodeWithText("Enter a whole number from 1 to 99.").assertIsDisplayed()
+        composeRule.onNodeWithTag("position-preset-add").assertIsNotEnabled()
+    }
+
+    @Test
+    fun positionPresetDialogRejectsAnExistingTarget() {
+        val cover = snapshot("cover.garage", "cover", "open", friendlyName = "Garage")
+        composeRule.setContent {
+            AppTheme {
+                PositionPresetDialog(cover, alreadyAdded = { it == 55 }, add = {}, dismiss = {})
+            }
+        }
+
+        composeRule.onNodeWithTag("position-preset-target").performTextInput("55")
+        composeRule.onNodeWithText("This target is already in Quick Access.").assertIsDisplayed()
+        composeRule.onNodeWithTag("position-preset-add").assertIsNotEnabled()
+    }
+
+    @Test
+    fun positionPresetDialogAddsAValidTarget() {
+        val cover = snapshot("cover.garage", "cover", "open", friendlyName = "Garage")
+        var added: Int? = null
+        composeRule.setContent {
+            AppTheme {
+                PositionPresetDialog(cover, alreadyAdded = { false }, add = { added = it }, dismiss = {})
+            }
+        }
+
+        composeRule.onNodeWithTag("position-preset-target").performTextInput("55")
+        composeRule.onNodeWithTag("position-preset-add").performClick()
+        composeRule.runOnIdle { assertEquals(55, added) }
     }
 
     private fun homeState(
