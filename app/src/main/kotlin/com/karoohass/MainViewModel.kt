@@ -287,6 +287,7 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
     fun continueOnboarding() = openOnboardingStep(state.value.settings.onboardingStep)
 
     fun openQuickAccess() {
+        if (screen.value == Screen.AUTH) cancelPendingAuthentication()
         viewModelScope.launch {
             val settings = rawSettings.first()
             if (settings.onboardingStep == OnboardingStep.COMPLETE) {
