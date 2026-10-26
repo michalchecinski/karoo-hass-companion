@@ -5,6 +5,12 @@
 > refinements, is documented in [current-implementation.md](current-implementation.md).
 > Where the two differ, the current implementation reference is authoritative.
 
+> **Verification policy update (2026-10-20):** The physical acceptance scenarios
+> below are historical test guidance. Physical Karoo and Home Assistant testing,
+> including the original Companion fallback release gate, is now optional unless
+> needed to resolve a material feasibility or correctness uncertainty. Follow
+> [the current issue-to-PR workflow](issue-to-pr-workflow.md).
+
 # Karoo Home Assistant Companion — v1 MVP
 
 ## Summary

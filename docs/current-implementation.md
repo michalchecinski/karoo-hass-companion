@@ -174,12 +174,17 @@ useful record of the intended scope but does not capture all later UX changes.
 
 ## Validation performed during implementation
 
-- The debug unit-test task and debug APK assembly task are run after each
-  implementation change:
+- The repository gate for application changes includes formatting checks,
+  local checks/tests and debug APK assembly:
 
   ```sh
-  ./gradlew :app:testDebugUnitTest :app:assembleDebug
+  ./gradlew ktlintCheck check assembleDebug
   ```
+
+- Instrumentation tests require an emulator/device and a separate
+  `./gradlew :app:connectedDebugAndroidTest` invocation; Gradle `check` does not
+  establish that they ran. See [the testing strategy](testing-strategy.md) for
+  per-change evidence requirements, current gaps and planned CI enforcement.
 
 - The current debug APK is produced at
   `app/build/outputs/apk/debug/app-debug.apk`.

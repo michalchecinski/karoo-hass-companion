@@ -37,7 +37,32 @@ When there was a UI change in the PR include screenshots of changed screens only
 ### Human judgment
 If a review comment or any other issue genuinely requires human judgment, ask the user for a decision. Do not resolve the comment or make that decision yourself.
 
-## Hammerhead Karoo integration
+## Testing requirements
+
+Read [the testing strategy](docs/testing-strategy.md) before planning or changing
+runtime behavior. For every feature or behavior change, map observable acceptance
+criteria and affected safety/security invariants to named executable tests. Cover
+relevant negative, boundary, cancellation, persistence and concurrency cases at
+the smallest reliable layer; test real orchestration when component wiring changes.
+Do not require every test type or add tests that merely mirror implementation.
+
+For bugs, seek a failing-before/passing-after regression. For consequential action,
+authentication, PIN, transport, persistence or lifecycle changes, demonstrate that
+tests detect the original defect or a relevant deliberately broken variant, then
+restore the correct implementation and rerun affected checks. Compilation failures
+do not count as behavioral detection. Record exact checks, final source identity,
+environment and gaps. Missing/skipped required tests are not a pass; never weaken
+assertions or hide failures to obtain green results. Follow the strategy's feedback
+loop when a defect escapes. Documentation-only and other nonbehavioral changes
+need appropriate validation rather than artificial application tests.
+
+## Issue implementation workflow
+
+Use the repository's `karoo-issue-to-pr` skill for an issue-to-PR implementation request. See `docs/issue-to-pr-workflow.md` for the local workflow.
+
+Physical Karoo and Home Assistant testing is optional unless needed to resolve a material feasibility or correctness uncertainty. Research platform-dependent behavior before implementation; pause for a targeted experiment or human decision if that research remains inconclusive. Automated tests and emulator checks must cover the behavior that can be verified locally. Explicitly report environments tested and remaining device limitations; never claim hardware validation from emulator results.
+
+## Hammerhead Karoo integration references
 
 When implementing Hammerhead Karoo functionality please follow guidelines and code samples from the following official Karoo sdk repository: https://github.com/hammerheadnav/karoo-ext. Especially different data sources, types and extensions are available here: https://github.com/hammerheadnav/karoo-ext/tree/master/app/src/main/kotlin/io/hammerhead/sampleext/extension.
 
