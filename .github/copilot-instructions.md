@@ -58,6 +58,18 @@ them.
 
 ## Tests and review comments
 
+- Apply `docs/testing-strategy.md`: require a named check for each changed
+  behavioral acceptance criterion and affected critical invariant. A passing
+  component test does not prove confirmation/PIN/request wiring or lifecycle
+  behavior through the real coordinator.
+- For consequential changes, inspect evidence that a regression or relevant
+  deliberately broken variant fails a behavioral assertion. Flag missing
+  verification for a concrete changed risk; do not demand arbitrary test counts
+  or a blanket coverage percentage. Required emulator tests must actually execute.
+- Never accept deleting/skipping regressions or weakening assertions merely to
+  obtain green checks. Intentional contract changes and test corrections need
+  supporting evidence. Do not infer that planned rollout gates already exist.
+
 - Require focused unit tests when changed logic affects authentication, secure
   storage, PIN lockouts, URL normalization, entity/action mapping, transport
   routing, stale-state gating, or outcome classification. Require tests for a

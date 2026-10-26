@@ -1,0 +1,4 @@
+interface:
+  display_name: "Karoo Issue to PR"
+  short_description: "Investigate, implement, review and publish an issue"
+  default_prompt: "Use $karoo-issue-to-pr to take this GitHub issue through investigation, implementation, independent review, and PR publication: <issue URL>."

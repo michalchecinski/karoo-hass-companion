@@ -178,7 +178,10 @@ The product is not intended to be:
   user, a fallback through the paired phone and Hammerhead Companion app. These
   paths may have different behavior and limitations.
 - Authentication, connectivity, usability, security, and lifecycle behavior
-  need validation on a physical Karoo 3.
+  need evidence appropriate to the change. Physical Karoo 3 testing is optional
+  unless it is necessary to resolve a material feasibility or correctness
+  uncertainty; emulator results do not establish hardware behavior. See
+  [the issue-to-PR workflow](issue-to-pr-workflow.md).
 
 These constraints describe the environment in which the product operates; they
 do not select a particular implementation. Detailed route selection, server
